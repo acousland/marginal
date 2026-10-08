@@ -15,8 +15,9 @@ jobs:
         run: scripts/build.sh
       - name: Verify both architectures
         run: |
-          lipo -verify_arch arm64 dist/Marginal.app/Contents/MacOS/Marginal
-          lipo -verify_arch x86_64 dist/Marginal.app/Contents/MacOS/Marginal
+          architectures=$(lipo -archs dist/Marginal.app/Contents/MacOS/Marginal)
+          [[ " $architectures " == *" arm64 "* ]]
+          [[ " $architectures " == *" x86_64 "* ]]
       - name: Smoke-test packaged app
         run: dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
       - name: Archive development build
