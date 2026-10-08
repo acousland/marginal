@@ -61,7 +61,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
 
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
-VERSION=1.0.0 scripts/release.sh
+VERSION=1.0.1 scripts/release.sh
 ```
 
 For notarization, first save credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.

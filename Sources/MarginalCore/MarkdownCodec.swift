@@ -178,7 +178,6 @@ public enum MarkdownCodec {
                 block.setWidth(8, type: .absoluteValueType, for: .padding)
                 block.setWidth(0.5, type: .absoluteValueType, for: .border)
                 block.setBorderColor(.separatorColor)
-                block.verticalAlignment = .top
                 if rowIndex == 0 { block.backgroundColor = .quaternaryLabelColor }
                 var attrs = MarkdownStyle.attributes(block: "table", quoteDepth: quote)
                 attrs[.tableID] = id
