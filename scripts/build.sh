@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version=${VERSION:-1.0.1}
+version=${VERSION:-1.1.0}
 configuration=${CONFIGURATION:-release}
 mkdir -p dist
 if [[ ${UNIVERSAL:-1} == 1 ]]; then
@@ -17,6 +17,7 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary" "$app/Contents/MacOS/Marginal"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set CFBundleShortVersionString $version" "$app/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set CFBundleVersion $version" "$app/Contents/Info.plist"
 if [[ -f Resources/AppIcon.icns ]]; then cp Resources/AppIcon.icns "$app/Contents/Resources/"; fi
 cp LICENSE "$app/Contents/Resources/LICENSE.txt"
 cp .build/checkouts/swift-markdown/LICENSE.txt "$app/Contents/Resources/Swift-Markdown-LICENSE.txt"

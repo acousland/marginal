@@ -11,6 +11,7 @@ let package = Package(
         .target(name: "MarginalApp", dependencies: ["MarginalCore"]),
         .executableTarget(name: "Marginal", dependencies: ["MarginalApp"]),
         .testTarget(name: "MarginalCoreTests", dependencies: ["MarginalCore"]),
-        .testTarget(name: "MarginalAppTests", dependencies: ["MarginalApp"])
+        .testTarget(name: "MarginalAppTests", dependencies: ["MarginalApp"]),
+        .testTarget(name: "MarginalUpdateTests", dependencies: ["MarginalApp"])
     ]
 )

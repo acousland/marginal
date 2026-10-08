@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${SIGNING_IDENTITY:?Set SIGNING_IDENTITY to your Developer ID Application identity}"
 : "${NOTARY_PROFILE:?Set NOTARY_PROFILE to your saved notarization Keychain profile}"
-version=${VERSION:-1.0.1}
+version=${VERSION:-1.1.0}
 VERSION="$version" scripts/build.sh
 app="dist/Marginal.app"
 codesign --force --options runtime --timestamp --sign "$SIGNING_IDENTITY" "$app"

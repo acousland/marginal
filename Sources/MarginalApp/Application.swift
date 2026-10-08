@@ -1,6 +1,7 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    let updates = UpdateChecker()
     func menuNeedsUpdate(_ menu: NSMenu) {
         guard menu.identifier?.rawValue == "recent" else { return }
         menu.removeAllItems()
@@ -29,7 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        updates.start()
     }
+    func applicationDidBecomeActive(_ notification: Notification) { updates.showPendingUpdate() }
     func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { true }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
@@ -77,6 +80,21 @@ private func smokeTest() throws {
 }
 
 public func runMarginal() {
+if CommandLine.arguments.contains("--check-updates") {
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    GitHubUpdateService(currentVersion: version).fetchLatest { result in
+        switch result {
+        case .success(let update):
+            if let update { print("Marginal \(update.version) is available: \(update.pageURL.absoluteString)") }
+            else { print("Marginal \(version) is up to date.") }
+            exit(0)
+        case .failure(let error):
+            fputs("Update check failed: \(error.localizedDescription)\n", stderr)
+            exit(1)
+        }
+    }
+    dispatchMain()
+}
 if CommandLine.arguments.contains("--smoke-test") {
     _ = NSApplication.shared
     do { try smokeTest(); exit(0) }
@@ -86,8 +104,15 @@ let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
 let mainMenu = NSMenu()
+let checkUpdates = menuItem("Check for Updates…", #selector(UpdateChecker.checkForUpdates(_:)))
+checkUpdates.target = delegate.updates
+delegate.updates.checkMenuItem = checkUpdates
+let automaticUpdates = menuItem("Automatically Check for Updates", #selector(UpdateChecker.toggleAutomaticChecks(_:)))
+automaticUpdates.target = delegate.updates
+automaticUpdates.state = delegate.updates.automaticallyChecks ? .on : .off
 mainMenu.addItem(submenu("Marginal", items: [
-    menuItem("About Marginal", #selector(NSApplication.orderFrontStandardAboutPanel(_:))), .separator(),
+    menuItem("About Marginal", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+    checkUpdates, automaticUpdates, .separator(),
     submenu("Services", items: []), .separator(),
     menuItem("Hide Marginal", #selector(NSApplication.hide(_:)), "h"),
     menuItem("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", modifiers: [.command, .option]),

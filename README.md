@@ -27,6 +27,14 @@ Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open
 | Find | ⌘F |
 | Markdown source / Rendered editor | ⇧⌘M |
 
+## Updates
+
+Choose **Marginal → Check for Updates…** to check the latest stable GitHub release immediately. Automatic checks are enabled by default and run at most once every 24 hours, after launch or while the app stays open. Toggle **Automatically Check for Updates** in the same menu to turn them off.
+
+A newer release produces a download prompt once per version, when Marginal is active. **Download Update** opens its GitHub release page; download the ZIP and replace the app in Applications. Background connection failures stay quiet. Manual checks report errors and when you're up to date. Drafts and prereleases are ignored.
+
+Update checks send an HTTPS request to GitHub with the app version in its User-Agent. Document contents and file paths remain local. Existing 1.0.x installations need this version installed once to gain update checking.
+
 ## What it handles
 
 - Headings, bold, italic, strikethrough, links, inline code, and fenced code blocks.
@@ -51,10 +59,11 @@ open dist/Marginal.app
 
 The build script creates a universal app with an ad-hoc development signature. For a faster local build, use `UNIVERSAL=0 scripts/build.sh`. Open `Package.swift` in Xcode to work on the app.
 
-The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file:
+The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file. You can also check the live update endpoint without displaying UI:
 
 ```sh
 dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
+dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 ```
 
 ## Signed releases
@@ -62,13 +71,15 @@ dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.0.1 scripts/release.sh
+VERSION=1.1.0 scripts/release.sh
 ```
 
 First save notarization credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.
 
+For future updates, increment `VERSION`, publish the corresponding `v<version>` tag, and upload `Marginal-<version>-macOS.zip` and its checksum to a stable GitHub release marked latest. The checker uses GitHub's latest-release endpoint and only offers releases with an uploaded app archive. No separate update feed is needed. The build script keeps both bundle version fields in sync with `VERSION`.
+
 ## Implementation
 
-Swift and AppKit, with native `NSTextView` editing and [Swift Markdown](https://github.com/swiftlang/swift-markdown) for CommonMark/GFM parsing. Markdown is parsed when opening a document or switching from source to rendered mode. Typing uses the native text system; Markdown serialization happens on save or when switching to source. The app works locally and does not fetch remote images.
+Swift and AppKit, with native `NSTextView` editing and [Swift Markdown](https://github.com/swiftlang/swift-markdown) for CommonMark/GFM parsing. Markdown is parsed when opening a document or switching from source to rendered mode. Typing uses the native text system; Markdown serialization happens on save or when switching to source. Editing stays local and remote images are not fetched. Update checking uses a small asynchronous native URLSession request to GitHub.
 
 [MIT license](LICENSE). Dependency licenses are included in the app bundle.
