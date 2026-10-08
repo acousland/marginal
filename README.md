@@ -10,7 +10,7 @@ A tiny, native Markdown viewer and WYSIWYG editor for macOS. Open a file, edit t
 
 Download the ZIP from Releases, unzip it, and drag **Marginal.app** to Applications.
 
-The initial release is signed with Aaron Cousland's Apple Developer ID and uses the hardened runtime. It is **not yet notarized**, so macOS Gatekeeper may block its first launch. Apple notarization requires credentials that are not configured on the release machine. This limitation is also recorded in the release notes.
+The latest release is signed with Aaron Cousland's Apple Developer ID, notarized by Apple, and includes a stapled notarization ticket. It uses the hardened runtime and passes macOS Gatekeeper assessment.
 
 ## Use
 
@@ -61,10 +61,11 @@ dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
 
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
+NOTARY_PROFILE='your-keychain-profile' \
 VERSION=1.0.1 scripts/release.sh
 ```
 
-For notarization, first save credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.
+First save notarization credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.
 
 ## Implementation
 
