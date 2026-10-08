@@ -1,0 +1,3 @@
+import MarginalApp
+
+runMarginal()

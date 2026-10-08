@@ -1,0 +1,25 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  macOS:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test Markdown and native editing
+        run: swift test
+      - name: Build universal app
+        run: scripts/build.sh
+      - name: Verify both architectures
+        run: lipo -verify_arch arm64 x86_64 dist/Marginal.app/Contents/MacOS/Marginal
+      - name: Smoke-test packaged app
+        run: dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
+      - name: Archive development build
+        run: ditto -c -k --keepParent dist/Marginal.app dist/Marginal-development.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Marginal-development
+          path: dist/Marginal-development.zip
