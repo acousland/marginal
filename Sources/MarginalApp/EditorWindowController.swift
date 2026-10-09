@@ -14,6 +14,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     private var scrollToBottom: NSLayoutConstraint?
     private let defaults: UserDefaults
     private var resizingEditor = false
+    private var resizeScheduled = false
     private(set) var wrapsLines: Bool
     static let toolbarKey = "showsFormattingToolbar"
     static let wordCountKey = "showsWordCount"
@@ -84,7 +85,10 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         editor.isIncrementalSearchingEnabled = true
         editor.isVerticallyResizable = true
         editor.isHorizontallyResizable = false
-        editor.autoresizingMask = [.width]
+        // Width is controlled in document coordinates by resizeEditor. Clip-view
+        // autoresizing uses the unmagnified frame and can grow the text view on
+        // every display pass while zoomed, causing a layout/display feedback loop.
+        editor.autoresizingMask = []
         editor.minSize = NSSize(width: 0, height: 600)
         editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         editor.backgroundColor = .textBackgroundColor
@@ -124,9 +128,22 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         updateStatusLayout()
         scroll.contentView.postsBoundsChangedNotifications = true
         scroll.postsFrameChangedNotifications = true
-        NotificationCenter.default.addObserver(self, selector: #selector(resizeEditor), name: NSView.frameDidChangeNotification, object: scroll)
-        NotificationCenter.default.addObserver(self, selector: #selector(resizeEditor), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(scheduleEditorResize), name: NSView.frameDidChangeNotification, object: scroll)
+        NotificationCenter.default.addObserver(self, selector: #selector(scheduleEditorResize), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         NotificationCenter.default.addObserver(self, selector: #selector(didMagnify), name: NSScrollView.didEndLiveMagnifyNotification, object: scroll)
+    }
+
+    @objc private func scheduleEditorResize() {
+        // Clip bounds also change while AppKit is drawing/laying out text. Avoid
+        // re-entering that work from the synchronous notification, and coalesce
+        // intermediate pinch updates. Ordinary scrolling needs no text reflow.
+        guard !resizingEditor, !resizeScheduled, abs(scroll.contentView.bounds.width - lastWidth) > 1 else { return }
+        resizeScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.resizeScheduled = false
+            self.resizeEditor()
+        }
     }
 
     @objc private func resizeEditor() {
@@ -137,7 +154,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         lastWidth = width
         editor.textContainerInset = NSSize(width: wrapsLines ? max(24, (width - 730) / 2) : 24, height: 35)
         editor.isHorizontallyResizable = !wrapsLines
-        editor.autoresizingMask = wrapsLines ? [.width] : []
+        editor.autoresizingMask = []
         scroll.hasHorizontalScroller = !wrapsLines
         guard let container = editor.textContainer else { return }
         container.widthTracksTextView = wrapsLines
@@ -151,15 +168,20 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     private func updateTableWidths() {
         guard let storage = editor.textStorage else { return }
         var tables: Set<ObjectIdentifier> = []
+        var changed = false
+        let width = wrapsLines ? 100 : max(1, min(730, lastWidth - 48))
+        let type: NSTextBlock.ValueType = wrapsLines ? .percentageValueType : .absoluteValueType
         storage.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
             for block in (value as? NSParagraphStyle)?.textBlocks ?? [] {
                 guard let table = (block as? NSTextTableBlock)?.table, tables.insert(ObjectIdentifier(table)).inserted else { continue }
                 // Percentage-width tables need a finite reading width when prose is unwrapped.
-                table.setValue(wrapsLines ? 100 : max(1, min(730, lastWidth - 48)),
-                               type: wrapsLines ? .percentageValueType : .absoluteValueType, for: .width)
+                if table.value(for: .width) != width || table.valueType(for: .width) != type {
+                    table.setValue(width, type: type, for: .width)
+                    changed = true
+                }
             }
         }
-        if !tables.isEmpty { editor.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil) }
+        if changed { editor.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil) }
     }
 
     @objc func zoomIn(_ sender: Any?) {

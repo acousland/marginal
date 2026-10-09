@@ -94,10 +94,11 @@ open dist/Marginal.app
 
 The build script creates an Apple silicon (`arm64`) app with an ad-hoc development signature and an embedded Sparkle framework. Set `MARGINAL_FEED_URL=none` for a trial build without update checks. Open `Package.swift` in Xcode to work on the app.
 
-The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file. You can also check the live update endpoint without displaying UI:
+The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file. Its display test opens a temporary document window and exercises zoom, magnification, scrolling, word wrap, source mode, and resizing through the real AppKit event loop. You can also check the live update endpoint without displaying UI:
 
 ```sh
 dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
+dist/Marginal.app/Contents/MacOS/Marginal --display-smoke-test
 dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 ```
 
@@ -106,7 +107,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 Update the default version in `scripts/build.sh`, `scripts/release.sh`, and `Resources/Info.plist`, and write the matching `RELEASE_NOTES.md`. Commit and push the source, then publish from this Mac:
 
 ```sh
-NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.3
+NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.4
 ```
 
 The script runs the tests, builds and signs the app and Sparkle helpers with a Developer ID Application certificate, notarizes and staples the app, verifies Gatekeeper acceptance, and signs the final ZIP using the `marginal` Sparkle account in the login Keychain. It publishes the tag, archive, and checksum to GitHub, verifies the download is available, then commits and publishes the updated `appcast.xml`. The feed never offers an archive before it is uploaded. Versions must increase; both bundle version fields use the release version.
@@ -120,7 +121,7 @@ To prepare signed artifacts without publishing:
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.2.3 scripts/release.sh
+VERSION=1.2.4 scripts/release.sh
 ```
 
 ## Implementation

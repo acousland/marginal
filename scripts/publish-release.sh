@@ -41,6 +41,7 @@ swift test
 python3 scripts/test-appcast.py
 VERSION="$version" SIGNING_IDENTITY="$identity" scripts/release.sh
 dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
+dist/Marginal.app/Contents/MacOS/Marginal --display-smoke-test
 if [[ $(lipo -archs dist/Marginal.app/Contents/MacOS/Marginal) != arm64 ]]; then
   echo "The release app must be Apple silicon only" >&2
   exit 1

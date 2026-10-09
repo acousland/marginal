@@ -102,6 +102,14 @@ final class EditorTextView: NSTextView {
         return true
     }
 
+    override func viewWillDraw() {
+        // Zoom can leave noncontiguous layout holes. Filling them from draw()
+        // invalidates display during AppKit's display pass and can trap on macOS.
+        // viewWillDraw is the supported place to prepare layout and invalidate display.
+        if let layoutManager, let textContainer { layoutManager.ensureLayout(for: textContainer) }
+        super.viewWillDraw()
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         if string.isEmpty {

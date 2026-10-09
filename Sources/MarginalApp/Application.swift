@@ -79,6 +79,9 @@ private func smokeTest() throws {
 }
 
 public func runMarginal() {
+if CommandLine.arguments.contains("--display-smoke-test") {
+    runDisplayProbe()
+}
 if CommandLine.arguments.contains("--check-updates") {
     _ = NSApplication.shared
     UpdateProbe().run()

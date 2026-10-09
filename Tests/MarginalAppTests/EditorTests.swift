@@ -53,6 +53,40 @@ final class EditorTests: XCTestCase {
         return lines
     }
 
+    func testZoomCompletesTextLayoutBeforeDrawing() throws {
+        let suite = "Marginal.ZoomDrawingTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let source = String(repeating: "Text with **bold**, `code`, and a [link](https://example.com).\n\n", count: 400)
+        let (document, controller) = try editor(source, defaults: defaults)
+        let layout = try XCTUnwrap(controller.editor.layoutManager)
+        controller.zoomIn(nil)
+        // Reproduce pending layout after a zoom/clip change, without the test's
+        // usual ensureLayout call hiding what happens in a real display pass.
+        layout.invalidateLayout(forCharacterRange: NSRange(location: 0, length: document.storage.length), actualCharacterRange: nil)
+        controller.editor.viewWillDraw()
+        XCTAssertEqual(layout.firstUnlaidCharacterIndex(), document.storage.length)
+        XCTAssertFalse(layout.hasNonContiguousLayout)
+        XCTAssertFalse(document.hasEdits)
+        XCTAssertEqual(document.markdown(), source)
+    }
+
+    func testZoomedClipResizeKeepsEditorAtViewportWidth() throws {
+        let suite = "Marginal.ZoomClipTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (_, controller) = try editor(String(repeating: "Some text to wrap. ", count: 80), defaults: defaults)
+        controller.zoomIn(nil)
+        let clip = controller.scroll.contentView
+        for _ in 0..<10 {
+            // A magnified clip has a different frame and bounds width. AppKit's
+            // subview resizing must not repeatedly enlarge the document view.
+            clip.resizeSubviews(withOldSize: clip.bounds.size)
+            controller.editor.viewWillDraw()
+            XCTAssertEqual(controller.editor.frame.width, clip.bounds.width, accuracy: 1)
+        }
+    }
+
     func testZoomReflowsWithoutChangingMarkdownOrSelection() throws {
         let suite = "Marginal.ZoomTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

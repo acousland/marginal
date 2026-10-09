@@ -1,5 +1,5 @@
-# Marginal 1.2.3
+# Marginal 1.2.4
 
-- Zoom in and out with ⌘+ / ⌘− or a trackpad pinch. Use ⌘0 to return to actual size.
-- Toggle Word Wrap from View. Wrap is on by default; turn it off for horizontal scrolling through long paragraphs and code.
-- Zoom and wrap work in both rendered and source mode, and are remembered for new windows. View changes leave your saved Markdown untouched.
+- Fix a text-view resizing loop that could crash while zooming on macOS 27, including trackpad pinch gestures.
+- Keep text reflow out of synchronous scroll-view bounds notifications and avoid unnecessary table layout invalidation.
+- Zoom, word wrap, and saved Markdown retain their existing behavior.
