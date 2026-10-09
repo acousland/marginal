@@ -2,7 +2,7 @@
 
 A tiny, native Markdown viewer and WYSIWYG editor for macOS. Open a file, edit the rendered document, and save it as ordinary Markdown.
 
-**[Download Marginal](https://github.com/acousland/marginal/releases/latest)** · macOS 13 or later · Apple silicon and Intel
+**[Download Marginal](https://github.com/acousland/marginal/releases/latest)** · macOS 13 or later · Apple silicon
 
 ![Marginal’s native rendered editor](docs/editor.png)
 
@@ -78,7 +78,7 @@ scripts/build.sh
 open dist/Marginal.app
 ```
 
-The build script creates a universal app with an ad-hoc development signature. For a faster local build, use `UNIVERSAL=0 scripts/build.sh`. Open `Package.swift` in Xcode to work on the app.
+The build script creates an Apple silicon (`arm64`) app with an ad-hoc development signature. Open `Package.swift` in Xcode to work on the app.
 
 The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file. You can also check the live update endpoint without displaying UI:
 

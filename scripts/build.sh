@@ -4,13 +4,8 @@ cd "$(dirname "$0")/.."
 version=${VERSION:-1.2.0}
 configuration=${CONFIGURATION:-release}
 mkdir -p dist
-if [[ ${UNIVERSAL:-1} == 1 ]]; then
-    swift build -c "$configuration" --arch arm64 --arch x86_64
-    binary="$(swift build -c "$configuration" --arch arm64 --arch x86_64 --show-bin-path)/Marginal"
-else
-    swift build -c "$configuration"
-    binary="$(swift build -c "$configuration" --show-bin-path)/Marginal"
-fi
+swift build -c "$configuration" --arch arm64
+binary="$(swift build -c "$configuration" --arch arm64 --show-bin-path)/Marginal"
 app="dist/Marginal.app"
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"

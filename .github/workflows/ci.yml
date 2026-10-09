@@ -11,13 +11,11 @@ jobs:
       - uses: actions/checkout@v7
       - name: Test Markdown and native editing
         run: swift test
-      - name: Build universal app
+      - name: Build Apple silicon app
         run: scripts/build.sh
-      - name: Verify both architectures
+      - name: Verify Apple silicon architecture
         run: |
-          architectures=$(lipo -archs dist/Marginal.app/Contents/MacOS/Marginal)
-          [[ " $architectures " == *" arm64 "* ]]
-          [[ " $architectures " == *" x86_64 "* ]]
+          [[ "$(lipo -archs dist/Marginal.app/Contents/MacOS/Marginal)" == "arm64" ]]
       - name: Smoke-test packaged app
         run: dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
       - name: Archive development build
