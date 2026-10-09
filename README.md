@@ -51,7 +51,11 @@ Type three backticks (optionally followed by a language such as `swift`) and pre
 
 ## Tables
 
-Use **Table → Insert Table…** to create a table with a header and the number of body rows and columns you choose. The optional formatting toolbar also has a table button. Click a cell, then use the same menu to add or delete rows and columns, align a column, or delete the table. These changes preserve cell formatting and support undo/redo. The required header row and final column cannot be deleted individually.
+Use **Table → Insert Table…** to create a table with a header and the number of body rows and columns you choose. The optional formatting toolbar also has a table button.
+
+Click in or hover over a table to reveal handles above columns and beside rows. Click a handle to select the whole row or column and open its add/delete menu. **Shift-click** another handle to select a range; click a selected handle again to act on the whole selection. Hover near a boundary on the top or left edge to reveal a **+** button and insert there. The controls follow the document when you zoom and scroll.
+
+The **Table** menu also offers **Select Row**, **Select Column**, insertion, deletion, and column alignment. **Delete** removes selected rows or columns; **Escape** clears the selection. **Copy** copies selected cells as tab-separated text, and **Cut** copies and removes them. Structural edits preserve inline formatting and support undo/redo. Deleting the header promotes the next row, and deleting every row or column removes the table.
 
 **Tab** and **Shift-Tab** move between cells; Tab from the last cell adds a row. **Return** inserts a line break inside a cell. **Table → Paragraph After Table** moves you out of the table to keep writing. Use the Table controls to change structure; Backspace and Delete protect cell boundaries.
 
@@ -99,6 +103,7 @@ The bundle has a self-test for file-type registration and opening, editing, savi
 ```sh
 dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
 dist/Marginal.app/Contents/MacOS/Marginal --display-smoke-test
+dist/Marginal.app/Contents/MacOS/Marginal --table-smoke-test
 dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 ```
 
@@ -107,7 +112,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 Update the default version in `scripts/build.sh`, `scripts/release.sh`, and `Resources/Info.plist`, and write the matching `RELEASE_NOTES.md`. Commit and push the source, then publish from this Mac:
 
 ```sh
-NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.4
+NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.3.0
 ```
 
 The script runs the tests, builds and signs the app and Sparkle helpers with a Developer ID Application certificate, notarizes and staples the app, verifies Gatekeeper acceptance, and signs the final ZIP using the `marginal` Sparkle account in the login Keychain. It publishes the tag, archive, and checksum to GitHub, verifies the download is available, then commits and publishes the updated `appcast.xml`. The feed never offers an archive before it is uploaded. Versions must increase; both bundle version fields use the release version.
@@ -121,7 +126,7 @@ To prepare signed artifacts without publishing:
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.2.4 scripts/release.sh
+VERSION=1.3.0 scripts/release.sh
 ```
 
 ## Implementation

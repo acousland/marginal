@@ -95,6 +95,10 @@ final class EditorTests: XCTestCase {
         let (document, controller) = try editor(source, defaults: defaults)
         controller.window?.setContentSize(NSSize(width: 600, height: 500))
         controller.window?.contentView?.layoutSubtreeIfNeeded()
+        // Bounds notifications deliberately defer reflow outside the display cycle.
+        let resized = expectation(description: "Window resize reflow")
+        DispatchQueue.main.async { resized.fulfill() }
+        wait(for: [resized], timeout: 1)
         let original = NSAttributedString(attributedString: document.storage)
         let selected = NSRange(location: 7, length: 5)
         controller.editor.setSelectedRange(selected)
@@ -506,20 +510,180 @@ extension EditorTests {
         XCTAssertNil(view.currentTable())
     }
 
-    func testTableMenuProtectsHeaderAndFinalColumnAndDisablesSourceControls() throws {
+    func testTableMenuAllowsHeaderAndFinalColumnActionsAndDisablesSourceControls() throws {
         let (_, controller) = try editor("| A |\n| --- |\n| B |\n")
         let view = controller.editor
         view.setSelectedRange(NSRange(location: 0, length: 0))
         let menu = EditorTextView.tableMenu(target: view)
         func enabled(_ title: String) throws -> Bool { view.validateMenuItem(try XCTUnwrap(menu.items.first { $0.title == title })) }
-        XCTAssertFalse(try enabled("Delete Row"))
-        XCTAssertFalse(try enabled("Add Row Above"))
-        XCTAssertFalse(try enabled("Delete Column"))
+        XCTAssertTrue(try enabled("Delete Row"))
+        XCTAssertTrue(try enabled("Add Row Above"))
+        XCTAssertTrue(try enabled("Delete Column"))
         XCTAssertTrue(try enabled("Add Row Below"))
         XCTAssertFalse(try enabled("Insert Table…"))
         controller.toggleSource(nil)
         XCTAssertFalse(try enabled("Add Row Below"))
         XCTAssertFalse(try enabled("Insert Table…"))
+    }
+
+    func testSelectedColumnsInsertAndDeleteTogetherWithUndo() throws {
+        let source = "Before\n\n| Name | State | Notes |\n| --- | :---: | ---: |\n| **Marginal** | [Ready](https://example.com) | Keep |\n\nAfter\n"
+        let (document, controller) = try editor(source)
+        let view = controller.editor
+        view.setSelectedRange((view.string as NSString).range(of: "Ready"))
+        let id = try XCTUnwrap(view.currentTable()?.id)
+        view.selectTableAxis(id: id, axis: .column, index: 1)
+        view.selectTableAxis(id: id, axis: .column, index: 2, extending: true)
+        XCTAssertEqual(view.tableAxisSelection?.indices, 1...2)
+        XCTAssertEqual(view.selectedTableText(), "State\tNotes\nReady\tKeep")
+        XCTAssertEqual(view.tableAxisMenu(.column).items.last?.title, "Delete 2 Columns")
+        view.addColumnBefore(nil)
+        XCTAssertEqual(view.currentTable()?.alignments, ["none", "none", "none", "center", "right"])
+        view.selectTableAxis(id: id, axis: .column, index: 1)
+        view.selectTableAxis(id: id, axis: .column, index: 2, extending: true)
+        view.deleteColumn(nil)
+        XCTAssertEqual(document.markdown(), MarkdownCodec.serialize(MarkdownCodec.render(source)))
+        document.undoManager!.endUndoGrouping()
+        document.undoManager!.beginUndoGrouping()
+        view.selectTableAxis(id: id, axis: .column, index: 1)
+        view.selectTableAxis(id: id, axis: .column, index: 2, extending: true)
+        view.deleteBackward(nil)
+        XCTAssertTrue(document.markdown().contains("| **Marginal** |"))
+        XCTAssertFalse(document.markdown().contains("Ready"))
+        XCTAssertTrue(document.markdown().hasSuffix("\n\nAfter\n"))
+        undo(document)
+        XCTAssertTrue(document.markdown().contains("[Ready]"))
+        document.undoManager!.redo()
+        XCTAssertFalse(document.markdown().contains("Ready"))
+    }
+
+    func testSelectedRowsDeleteHeaderPromotesNextAndWholeSelectionRemovesTable() throws {
+        let source = "Before\n\n| Head | Value |\n| --- | --- |\n| First | **One** |\n| Second | Two |\n| Third | Three |\n\nAfter\n"
+        let (document, controller) = try editor(source)
+        let view = controller.editor
+        view.setSelectedRange((view.string as NSString).range(of: "First"))
+        let id = try XCTUnwrap(view.currentTable()?.id)
+        view.selectTableAxis(id: id, axis: .row, index: 0)
+        view.deleteRow(nil)
+        XCTAssertTrue(document.markdown().contains("| First | **One** |\n| --- | --- |"), document.markdown())
+        undo(document)
+        document.undoManager!.beginUndoGrouping()
+        view.selectTableAxis(id: id, axis: .row, index: 1)
+        view.selectTableAxis(id: id, axis: .row, index: 2, extending: true)
+        view.deleteRow(nil)
+        XCTAssertTrue(document.markdown().contains("| Third | Three |"))
+        XCTAssertFalse(document.markdown().contains("First"))
+        XCTAssertFalse(document.markdown().contains("Second"))
+        undo(document)
+        document.undoManager!.beginUndoGrouping()
+        view.selectTableAxis(id: id, axis: .row, index: 0)
+        view.selectTableAxis(id: id, axis: .row, index: 3, extending: true)
+        view.deleteRow(nil)
+        XCTAssertEqual(document.markdown(), "Before\n\nAfter\n")
+        undo(document)
+        XCTAssertEqual(document.markdown(), MarkdownCodec.serialize(MarkdownCodec.render(source)))
+    }
+
+    func testAxisSelectionClearsOnOrdinaryEditingAndSourceMode() throws {
+        let (document, controller) = try editor("| A | B |\n| --- | --- |\n| C | D |\n")
+        let view = controller.editor
+        let id = try XCTUnwrap(view.currentTable()?.id)
+        view.selectTableAxis(id: id, axis: .row, index: 1)
+        view.setSelectedRange((view.string as NSString).range(of: "D"))
+        XCTAssertNil(view.tableAxisSelection)
+        view.selectTableAxis(id: id, axis: .column, index: 1)
+        view.insertText("New", replacementRange: view.selectedRange())
+        XCTAssertNil(view.tableAxisSelection)
+        XCTAssertTrue(document.markdown().contains("NewB"))
+        XCTAssertTrue(document.markdown().contains("| C | D |"))
+        view.selectTableAxis(id: id, axis: .column, index: 0)
+        view.selectTableAxis(id: id, axis: .column, index: 1, extending: true)
+        // Reopening the menu on a selected handle retains the multi-selection.
+        view.selectTableAxis(id: id, axis: .column, index: 0)
+        XCTAssertEqual(view.tableAxisSelection?.indices, 0...1)
+        view.cancelOperation(nil)
+        XCTAssertNil(view.tableAxisSelection)
+        view.selectTableAxis(id: id, axis: .column, index: 0)
+        controller.toggleSource(nil)
+        XCTAssertNil(view.tableAxisSelection)
+        view.viewWillDraw()
+        XCTAssertTrue(view.tableControls.isHidden)
+    }
+
+    func testTableEdgeGeometryInsertionAndHitTestingAtZoom() throws {
+        let (_, controller) = try editor("| A | B |\n| --- | --- |\n| C | D |\n")
+        let view = controller.editor
+        view.viewWillDraw()
+        let geometry = try XCTUnwrap(view.tableControls.geometry)
+        XCTAssertEqual(geometry.rows.count, 2)
+        XCTAssertEqual(geometry.columns.count, 2)
+        XCTAssertNil(view.tableControls.hitTest(NSPoint(x: geometry.rect.midX, y: geometry.rows[1].midY)))
+        let button = try XCTUnwrap(view.tableControls.subviews.compactMap { $0 as? TableEdgeButton }.first { $0.inserts && $0.axis == .column && $0.index == 1 })
+        view.tableControls.updateHover(at: NSPoint(x: button.frame.midX, y: button.frame.midY))
+        XCTAssertFalse(button.isHidden)
+        XCTAssertTrue(view.tableControls.hitTest(NSPoint(x: button.frame.midX, y: button.frame.midY)) === button)
+        let point = view.convert(NSPoint(x: button.frame.midX, y: button.frame.midY), to: view.superview)
+        XCTAssertTrue(view.hitTest(point) === button)
+        button.performClick(nil)
+        XCTAssertEqual(view.currentTable()?.alignments.count, 3)
+        XCTAssertEqual(view.currentTable()?.cells[1].map(\.string), ["C", "", "D"])
+        controller.zoomIn(nil)
+        view.viewWillDraw()
+        let zoomed = try XCTUnwrap(view.tableControls.geometry)
+        XCTAssertEqual(zoomed.columns.count, 3)
+        XCTAssertEqual(view.tableControls.scale, controller.zoomLevel, accuracy: 0.001)
+        let handle = try XCTUnwrap(view.tableControls.subviews.compactMap { $0 as? TableEdgeButton }.first)
+        XCTAssertEqual(handle.frame.width * controller.zoomLevel, 18, accuracy: 0.001)
+        view.selectTableAxis(id: zoomed.id, axis: .row, index: 0)
+        view.insertTableAxis(.row, at: 0)
+        XCTAssertEqual(view.currentTable()?.cells.count, 3)
+        XCTAssertEqual(view.currentTable()?.cells[1].map(\.string), ["A", "", "B"])
+    }
+
+    func testHoverControlsEditTheirTableRatherThanTheCaretTable() throws {
+        let source = "| A |\n| --- |\n| B |\n\nBetween the tables.\n\n| C |\n| --- |\n| D |\n"
+        let (document, controller) = try editor(source)
+        let view = controller.editor
+        view.viewWillDraw()
+        let firstID = try XCTUnwrap(view.currentTable()?.id)
+        let second = try XCTUnwrap(view.tableGeometry(at: (view.string as NSString).range(of: "D").location))
+        view.updateTableHover(at: NSPoint(x: second.rect.midX, y: second.rows[1].midY))
+        view.viewWillDraw()
+        XCTAssertEqual(view.tableControls.geometry?.id, second.id)
+        XCTAssertEqual(view.currentTable()?.id, firstID)
+        let button = try XCTUnwrap(view.tableControls.subviews.compactMap { $0 as? TableEdgeButton }.first { $0.inserts && $0.axis == .row && $0.index == 2 })
+        view.tableControls.updateHover(at: NSPoint(x: button.frame.midX, y: button.frame.midY))
+        button.performClick(nil)
+        XCTAssertEqual(view.currentTable()?.id, second.id)
+        XCTAssertEqual(view.currentTable()?.cells.count, 3)
+        XCTAssertTrue(document.markdown().hasPrefix("| A |\n| --- |\n| B |\n\nBetween the tables\\."), document.markdown())
+        XCTAssertTrue(document.markdown().hasSuffix("| C |\n| --- |\n| D |\n|  |\n"))
+    }
+
+    func testTableSelectionControlsRenderToImage() throws {
+        let suite = "Marginal.TableRenderTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let (_, controller) = try editor("# Tables\n\nSelect rows and columns using the edge handles. Shift-click to select more.\n\n| Feature | Status | Notes |\n| --- | :---: | --- |\n| **Headings** | Ready | Keep formatting |\n| Tables | Editable | Add and delete |\n\nKeep writing below your table.\n", defaults: defaults)
+        controller.window?.setContentSize(NSSize(width: 860, height: 600))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        controller.actualSize(nil)
+        let editor = controller.editor
+        editor.setSelectedRange((editor.string as NSString).range(of: "Editable"))
+        let id = try XCTUnwrap(editor.currentTable()?.id)
+        editor.selectTableAxis(id: id, axis: .column, index: 1)
+        editor.selectTableAxis(id: id, axis: .column, index: 2, extending: true)
+        editor.viewWillDraw()
+        XCTAssertNotNil(editor.tableControls.geometry)
+        if let button = editor.tableControls.subviews.compactMap({ $0 as? TableEdgeButton }).first(where: { $0.inserts && $0.axis == .column && $0.index == 1 }) {
+            editor.tableControls.updateHover(at: NSPoint(x: button.frame.midX, y: button.frame.midY))
+        }
+        controller.window?.appearance = NSAppearance(named: .aqua)
+        let view = try XCTUnwrap(controller.window?.contentView?.superview)
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/marginal-table-controls.png"))
+        XCTAssertEqual(editor.tableAxisSelection?.indices, 1...2)
     }
 
     func testTableCellBoundariesAndMultilinePasting() throws {

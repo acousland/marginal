@@ -79,6 +79,9 @@ private func smokeTest() throws {
 }
 
 public func runMarginal() {
+if CommandLine.arguments.contains("--table-smoke-test") {
+    runDisplayProbe(tables: true)
+}
 if CommandLine.arguments.contains("--display-smoke-test") {
     runDisplayProbe()
 }

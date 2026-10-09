@@ -2,16 +2,24 @@ import AppKit
 import MarginalCore
 
 final class EditorTextView: NSTextView {
-    var sourceMode = false
+    var sourceMode = false {
+        didSet { if sourceMode { tableAxisSelection = nil; hoveredTableLocation = nil; needsDisplay = true } }
+    }
+    var tableAxisSelection: TableAxisSelection?
+    var hoveredTableLocation: Int?
+    private var tableTrackingArea: NSTrackingArea?
+    lazy var tableControls = TableControlsView(editor: self)
     private var isPasting = false
     private var structuralChange = false
 
     override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if tableAxisSelection != nil, [#selector(copy(_:)), #selector(cut(_:))].contains(menuItem.action) { return true }
         if let enabled = tableMenuValidation(menuItem) { return enabled }
         return super.validateMenuItem(menuItem)
     }
 
     override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        tableAxisSelection = nil
         let selection = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
         if !isPasting, !hasMarkedText(), insertString as? String == " ",
            applyTypingShortcut(at: selection, fencedCode: false) { return }
@@ -107,7 +115,64 @@ final class EditorTextView: NSTextView {
         // invalidates display during AppKit's display pass and can trap on macOS.
         // viewWillDraw is the supported place to prepare layout and invalidate display.
         if let layoutManager, let textContainer { layoutManager.ensureLayout(for: textContainer) }
+        updateTableControls()
         super.viewWillDraw()
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting flag: Bool) {
+        let hadTableSelection = tableAxisSelection != nil
+        tableAxisSelection = nil
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: flag)
+        if hadTableSelection { needsDisplay = true }
+    }
+
+    override var shouldDrawInsertionPoint: Bool { tableAxisSelection == nil && super.shouldDrawInsertionPoint }
+
+    override func cancelOperation(_ sender: Any?) {
+        if tableAxisSelection != nil { tableAxisSelection = nil; needsDisplay = true }
+        else { super.cancelOperation(sender) }
+    }
+
+    override func updateTrackingAreas() {
+        if let tableTrackingArea { removeTrackingArea(tableTrackingArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        tableTrackingArea = area
+        addTrackingArea(area)
+        super.updateTrackingAreas()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateTableHover(at: convert(event.locationInWindow, from: nil))
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoveredTableLocation = nil
+        tableControls.updateHover(at: nil)
+        needsDisplay = true
+        super.mouseExited(with: event)
+    }
+
+    override func copy(_ sender: Any?) {
+        guard let text = selectedTableText() else { super.copy(sender); return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    override func cut(_ sender: Any?) {
+        guard let selection = tableAxisSelection else { super.cut(sender); return }
+        copy(sender)
+        if selection.axis == .row { deleteRow(sender) } else { deleteColumn(sender) }
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        if let selection = tableAxisSelection {
+            if selection.axis == .row { deleteRow(sender) } else { deleteColumn(sender) }
+        } else { super.deleteBackward(sender) }
+    }
+
+    override func deleteForward(_ sender: Any?) {
+        if tableAxisSelection != nil { deleteBackward(sender) } else { super.deleteForward(sender) }
     }
 
     override func draw(_ dirtyRect: NSRect) {

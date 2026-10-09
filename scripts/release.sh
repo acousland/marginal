@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${SIGNING_IDENTITY:?Set SIGNING_IDENTITY to your Developer ID Application identity}"
 : "${NOTARY_PROFILE:?Set NOTARY_PROFILE to your saved notarization Keychain profile}"
-version=${VERSION:-1.2.4}
+version=${VERSION:-1.3.0}
 if [[ $SIGNING_IDENTITY == - ]]; then
   echo "Releases require a Developer ID Application signing identity" >&2
   exit 1

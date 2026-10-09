@@ -1,5 +1,7 @@
-# Marginal 1.2.4
+# Marginal 1.3.0
 
-- Fix a text-view resizing loop that could crash while zooming on macOS 27, including trackpad pinch gestures.
-- Keep text reflow out of synchronous scroll-view bounds notifications and avoid unnecessary table layout invalidation.
-- Zoom, word wrap, and saved Markdown retain their existing behavior.
+- Select rows and columns using handles beside and above the active table. Shift-click to select several, then use a selected handle's menu to add or delete them together.
+- Hover over table-edge boundaries to reveal + buttons for inserting rows and columns.
+- Use Delete, Copy, Cut, and Escape with row and column selections. Table edits preserve inline formatting and support undo/redo.
+- Deleting a header promotes the next row; deleting all rows or columns removes the table.
+- Table controls follow zoom and scrolling, and stay hidden outside the active or hovered table.

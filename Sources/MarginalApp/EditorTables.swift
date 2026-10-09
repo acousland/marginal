@@ -137,38 +137,72 @@ extension EditorTextView {
         }
     }
 
+    private func selectedIndices(_ axis: TableAxis, in table: TableSelection) -> ClosedRange<Int> {
+        if let selection = tableAxisSelection, selection.id == table.id, selection.axis == axis { return selection.indices }
+        let index = axis == .row ? table.row : table.column
+        return index...index
+    }
+
+    func insertTableAxis(_ axis: TableAxis, at index: Int, count: Int = 1) {
+        guard var table = currentTable(), count > 0 else { return }
+        if axis == .row {
+            guard (0...table.cells.count).contains(index) else { return }
+            let rows = (0..<count).map { _ in table.alignments.map { _ in NSAttributedString(string: "") } }
+            table.cells.insert(contentsOf: rows, at: index)
+            replaceTable(table, row: index, column: table.column, action: count == 1 ? "Add Table Row" : "Add Table Rows")
+        } else {
+            guard (0...table.alignments.count).contains(index) else { return }
+            for row in table.cells.indices {
+                table.cells[row].insert(contentsOf: (0..<count).map { _ in NSAttributedString(string: "") }, at: index)
+            }
+            table.alignments.insert(contentsOf: Array(repeating: "none", count: count), at: index)
+            replaceTable(table, row: table.row, column: index, action: count == 1 ? "Add Table Column" : "Add Table Columns")
+        }
+    }
+
     private func addRow(after: Bool) {
-        guard var table = currentTable(), after || table.row > 0 else { return }
-        let index = after ? table.row + 1 : table.row
-        table.cells.insert(table.alignments.map { _ in NSAttributedString(string: "") }, at: index)
-        replaceTable(table, row: index, column: table.column, action: "Add Table Row")
+        guard let table = currentTable() else { return }
+        let indices = selectedIndices(.row, in: table)
+        insertTableAxis(.row, at: after ? indices.upperBound + 1 : indices.lowerBound, count: indices.count)
     }
     @objc func addRowAbove(_ sender: Any?) { addRow(after: false) }
     @objc func addRowBelow(_ sender: Any?) { addRow(after: true) }
+    @objc func selectRow(_ sender: Any?) {
+        if let table = currentTable() { selectTableAxis(id: table.id, axis: .row, index: table.row) }
+    }
+    @objc func selectColumn(_ sender: Any?) {
+        if let table = currentTable() { selectTableAxis(id: table.id, axis: .column, index: table.column) }
+    }
     @objc func deleteRow(_ sender: Any?) {
-        guard var table = currentTable(), table.row > 0 else { return }
-        table.cells.remove(at: table.row)
-        replaceTable(table, row: min(table.row, table.cells.count - 1), column: table.column, action: "Delete Table Row")
+        guard var table = currentTable() else { return }
+        let indices = selectedIndices(.row, in: table)
+        guard indices.allSatisfy({ table.cells.indices.contains($0) }) else { return }
+        if indices.count == table.cells.count { deleteTable(sender); return }
+        table.cells.removeSubrange(indices)
+        replaceTable(table, row: min(indices.lowerBound, table.cells.count - 1), column: table.column,
+                     action: indices.count == 1 ? "Delete Table Row" : "Delete Table Rows")
     }
 
     private func addColumn(after: Bool) {
-        guard var table = currentTable() else { return }
-        let index = table.column + (after ? 1 : 0)
-        for row in table.cells.indices { table.cells[row].insert(NSAttributedString(string: ""), at: index) }
-        table.alignments.insert("none", at: index)
-        replaceTable(table, row: table.row, column: index, action: "Add Table Column")
+        guard let table = currentTable() else { return }
+        let indices = selectedIndices(.column, in: table)
+        insertTableAxis(.column, at: after ? indices.upperBound + 1 : indices.lowerBound, count: indices.count)
     }
     @objc func addColumnBefore(_ sender: Any?) { addColumn(after: false) }
     @objc func addColumnAfter(_ sender: Any?) { addColumn(after: true) }
     @objc func deleteColumn(_ sender: Any?) {
-        guard var table = currentTable(), table.alignments.count > 1 else { return }
-        for row in table.cells.indices { table.cells[row].remove(at: table.column) }
-        table.alignments.remove(at: table.column)
-        replaceTable(table, row: table.row, column: min(table.column, table.alignments.count - 1), action: "Delete Table Column")
+        guard var table = currentTable() else { return }
+        let indices = selectedIndices(.column, in: table)
+        guard indices.allSatisfy({ table.alignments.indices.contains($0) }) else { return }
+        if indices.count == table.alignments.count { deleteTable(sender); return }
+        for row in table.cells.indices { table.cells[row].removeSubrange(indices) }
+        table.alignments.removeSubrange(indices)
+        replaceTable(table, row: table.row, column: min(indices.lowerBound, table.alignments.count - 1),
+                     action: indices.count == 1 ? "Delete Table Column" : "Delete Table Columns")
     }
     private func alignColumn(_ alignment: String) {
         guard var table = currentTable() else { return }
-        table.alignments[table.column] = alignment
+        for column in selectedIndices(.column, in: table) { table.alignments[column] = alignment }
         replaceTable(table, row: table.row, column: table.column, action: "Align Table Column")
     }
     @objc func alignColumnLeft(_ sender: Any?) { alignColumn("left") }
@@ -208,6 +242,7 @@ extension EditorTextView {
 
     private static let tableMenuDefinitions: [(String, Selector?)] = [
             ("Insert Table…", #selector(insertTable(_:))), ("", nil),
+            ("Select Row", #selector(selectRow(_:))), ("Select Column", #selector(selectColumn(_:))), ("", nil),
             ("Add Row Above", #selector(addRowAbove(_:))), ("Add Row Below", #selector(addRowBelow(_:))),
             ("Delete Row", #selector(deleteRow(_:))), ("", nil),
             ("Add Column Before", #selector(addColumnBefore(_:))), ("Add Column After", #selector(addColumnAfter(_:))),
@@ -228,14 +263,28 @@ extension EditorTextView {
         return menu
     }
 
+    func tableAxisMenu(_ axis: TableAxis) -> NSMenu {
+        let count = tableAxisSelection?.indices.count ?? 1
+        let name = axis == .row ? "Row" : "Column"
+        let label = count == 1 ? name : "\(count) \(name)s"
+        let definitions: [(String, Selector)] = axis == .row
+            ? [("Add \(label) Above", #selector(addRowAbove(_:))), ("Add \(label) Below", #selector(addRowBelow(_:))), ("Delete \(label)", #selector(deleteRow(_:)))]
+            : [("Add \(label) Left", #selector(addColumnBefore(_:))), ("Add \(label) Right", #selector(addColumnAfter(_:))), ("Delete \(label)", #selector(deleteColumn(_:)))]
+        let menu = NSMenu(title: name)
+        for (title, action) in definitions {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            menu.addItem(item)
+        }
+        return menu
+    }
+
     func tableMenuValidation(_ menuItem: NSMenuItem) -> Bool? {
         guard let action = menuItem.action, Self.tableMenuDefinitions.contains(where: { $0.1 == action }) else { return nil }
         guard !sourceMode else { return false }
         let table = currentTable()
         if action == #selector(insertTable(_:)) { return canInsertTable }
-        guard let table else { return false }
-        if action == #selector(deleteRow(_:)) || action == #selector(addRowAbove(_:)) { return table.row > 0 }
-        if action == #selector(deleteColumn(_:)) { return table.alignments.count > 1 }
+        guard table != nil else { return false }
         return true
     }
 }
