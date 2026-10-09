@@ -4,9 +4,29 @@ import MarginalCore
 @testable import MarginalApp
 
 final class EditorTests: XCTestCase {
+    private var documents: [MarginalDocument] = []
+
+    override func tearDown() {
+        for document in documents {
+            if let manager = document.undoManager {
+                while manager.groupingLevel > 0 { manager.endUndoGrouping() }
+                manager.removeAllActions()
+            }
+            document.close()
+        }
+        documents.removeAll()
+        super.tearDown()
+    }
+
     private func editor(_ source: String) throws -> (MarginalDocument, EditorWindowController) {
         _ = NSApplication.shared
         let document = MarginalDocument()
+        // Tests explicitly close groups to exercise undo without a running app event loop.
+        // Disable automatic event grouping so async tests cannot later close those groups again.
+        document.undoManager = UndoManager()
+        document.undoManager!.groupsByEvent = false
+        document.undoManager!.beginUndoGrouping()
+        documents.append(document)
         try document.read(from: Data(source.utf8), ofType: "net.daringfireball.markdown")
         document.makeWindowControllers()
         let controller = try XCTUnwrap(document.windowControllers.first as? EditorWindowController)
