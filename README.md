@@ -14,7 +14,7 @@ The latest release is signed with Aaron Cousland's Apple Developer ID, notarized
 
 ## Use
 
-Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open** (⌘O), or drop it onto the app in Finder. Click anywhere in the rendered text and type. Use the small toolbar or Format menu to change formatting. **⌘S** saves; standard macOS autosave also saves existing documents in place.
+Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open** (⌘O), or drop it onto the app in Finder. Click anywhere in the rendered text and type. The default window keeps the document in focus, with the formatting toolbar and word count hidden. Use the **Format** and **Table** menus or keyboard shortcuts to edit. **View → Show Formatting Toolbar** (⌥⌘T) and **View → Show Word Count** bring back the optional controls; your choices are remembered for new windows. **⌘S** saves; standard macOS autosave also saves existing documents in place.
 
 | Action | Shortcut |
 | --- | --- |
@@ -26,6 +26,7 @@ Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open
 | Bullet list / Numbered list / Quote | ⌥⌘7 / ⌥⌘8 / ⌥⌘9 |
 | Find | ⌘F |
 | Markdown source / Rendered editor | ⇧⌘M |
+| Show / Hide formatting toolbar | ⌥⌘T |
 
 ## Typing shortcuts
 
@@ -42,7 +43,7 @@ Type three backticks (optionally followed by a language such as `swift`) and pre
 
 ## Tables
 
-Use the **table button in the toolbar** or **Table → Insert Table…** to create a table with a header and the number of body rows and columns you choose. Click a cell, then use the same menu to add or delete rows and columns, align a column, or delete the table. These changes preserve cell formatting and support undo/redo. The required header row and final column cannot be deleted individually.
+Use **Table → Insert Table…** to create a table with a header and the number of body rows and columns you choose. The optional formatting toolbar also has a table button. Click a cell, then use the same menu to add or delete rows and columns, align a column, or delete the table. These changes preserve cell formatting and support undo/redo. The required header row and final column cannot be deleted individually.
 
 **Tab** and **Shift-Tab** move between cells; Tab from the last cell adds a row. **Return** inserts a line break inside a cell. **Table → Paragraph After Table** moves you out of the table to keep writing. Use the Table controls to change structure; Backspace and Delete protect cell boundaries.
 
@@ -97,7 +98,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 Update the default version in `scripts/build.sh`, `scripts/release.sh`, and `Resources/Info.plist`, and write the matching `RELEASE_NOTES.md`. Commit and push the source, then publish from this Mac:
 
 ```sh
-NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.1
+NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.2
 ```
 
 The script runs the tests, builds and signs the app and Sparkle helpers with a Developer ID Application certificate, notarizes and staples the app, verifies Gatekeeper acceptance, and signs the final ZIP using the `marginal` Sparkle account in the login Keychain. It publishes the tag, archive, and checksum to GitHub, verifies the download is available, then commits and publishes the updated `appcast.xml`. The feed never offers an archive before it is uploaded. Versions must increase; both bundle version fields use the release version.
@@ -111,7 +112,7 @@ To prepare signed artifacts without publishing:
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.2.1 scripts/release.sh
+VERSION=1.2.2 scripts/release.sh
 ```
 
 ## Implementation

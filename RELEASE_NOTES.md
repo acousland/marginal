@@ -1,5 +1,5 @@
-# Marginal 1.2.1
+# Marginal 1.2.2
 
-- Download and install updates inside Marginal, using the same Sparkle updater as Mondrian.
-- Choose whether to check for updates automatically and whether to download and install them automatically from the Marginal menu.
-- Updates are verified against Marginal’s signing key before installation. Existing automatic-check preferences are preserved.
+- A text-first window: the formatting toolbar and word count are hidden by default, leaving more room for your document.
+- Show the optional formatting toolbar and word count from View. Your choices are remembered for new windows.
+- Formatting, tables, and Markdown source remain available through menus and keyboard shortcuts. Source mode has a small title-bar label.

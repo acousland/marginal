@@ -1,7 +1,7 @@
 import AppKit
 import MarginalCore
 
-final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSToolbarDelegate {
+final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSToolbarDelegate, NSMenuItemValidation {
     let editor: EditorTextView
     let scroll = NSScrollView()
     let status = NSTextField(labelWithString: "")
@@ -10,8 +10,14 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     private var statusWork: DispatchWorkItem?
     private var sourceItem: NSToolbarItem?
     private var lastWidth: CGFloat = 0
+    private var scrollToStatus: NSLayoutConstraint?
+    private var scrollToBottom: NSLayoutConstraint?
+    private let defaults: UserDefaults
+    static let toolbarKey = "showsFormattingToolbar"
+    static let wordCountKey = "showsWordCount"
 
-    init(document: MarginalDocument) {
+    init(document: MarginalDocument, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         markdownDocument = document
         let layout = NSLayoutManager()
         layout.allowsNonContiguousLayout = true
@@ -29,18 +35,28 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         window.center()
         window.setFrameAutosaveName("MarginalEditor")
         configureEditor()
+        configureStylePicker()
         configureLayout()
         let toolbar = NSToolbar(identifier: "MarginalToolbar")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         window.toolbar = toolbar
-        window.toolbarStyle = .unified
+        window.toolbarStyle = .unifiedCompact
+        toolbar.isVisible = defaults.bool(forKey: Self.toolbarKey)
         window.makeFirstResponder(editor)
         updateStatus()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    private func configureStylePicker() {
+        stylePicker.addItems(withTitles: ["Body", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6", "Bullet List", "Numbered List", "Quote", "Code Block"])
+        stylePicker.target = self
+        stylePicker.action = #selector(selectStyle)
+        stylePicker.setAccessibilityLabel("Paragraph style")
+        stylePicker.frame = NSRect(x: 0, y: 0, width: 125, height: 26)
+    }
 
     private func configureEditor() {
         editor.delegate = self
@@ -78,17 +94,20 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         content.addSubview(scroll)
         status.font = .systemFont(ofSize: 11)
         status.textColor = .secondaryLabelColor
+        status.isHidden = !defaults.bool(forKey: Self.wordCountKey)
         status.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(status)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: content.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -8),
             status.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
             status.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -18),
             status.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -8)
         ])
+        scrollToStatus = scroll.bottomAnchor.constraint(equalTo: status.topAnchor, constant: -8)
+        scrollToBottom = scroll.bottomAnchor.constraint(equalTo: content.bottomAnchor)
+        updateStatusLayout()
         scroll.contentView.postsBoundsChangedNotifications = true
         scroll.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(resizeEditor), name: NSView.frameDidChangeNotification, object: scroll)
@@ -129,9 +148,41 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     }
 
     private func updateStatus() {
+        guard !status.isHidden else { return }
         let words = editor.string.split(whereSeparator: { $0.isWhitespace || $0 == "\u{fffc}" }).filter { !["•", "☐", "☑"].contains(String($0)) }.count
         status.stringValue = "\(words.formatted()) \(words == 1 ? "word" : "words")" + (editor.sourceMode ? "  ·  Markdown source" : "")
         status.setAccessibilityLabel(status.stringValue)
+    }
+
+    private func updateStatusLayout() {
+        scrollToStatus?.isActive = false
+        scrollToBottom?.isActive = false
+        (status.isHidden ? scrollToBottom : scrollToStatus)?.isActive = true
+    }
+
+    @objc func toggleFormattingToolbar(_ sender: Any?) {
+        guard let toolbar = window?.toolbar else { return }
+        toolbar.isVisible.toggle()
+        defaults.set(toolbar.isVisible, forKey: Self.toolbarKey)
+        window?.makeFirstResponder(editor)
+    }
+
+    @objc func toggleWordCount(_ sender: Any?) {
+        status.isHidden.toggle()
+        defaults.set(!status.isHidden, forKey: Self.wordCountKey)
+        updateStatusLayout()
+        updateStatus()
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(toggleFormattingToolbar(_:)) {
+            menuItem.state = window?.toolbar?.isVisible == true ? .on : .off
+        } else if menuItem.action == #selector(toggleWordCount(_:)) {
+            menuItem.state = status.isHidden ? .off : .on
+        } else if menuItem.action == #selector(toggleSource(_:)) {
+            menuItem.title = editor.sourceMode ? "Show Rendered Editor" : "Show Markdown Source"
+        }
+        return true
     }
 
     @objc func selectStyle(_ sender: NSPopUpButton) {
@@ -163,11 +214,16 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         editor.typingAttributes = source ? [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor] : MarkdownStyle.attributes()
         editor.setSelectedRange(NSRange(location: min(selection.location, rendered.length), length: min(selection.length, max(0, rendered.length - selection.location))))
         stylePicker.isEnabled = !source
-        sourceItem?.label = source ? "Rendered Editor" : "Markdown Source"
-        sourceItem?.toolTip = source ? "Show rendered editor (⇧⌘M)" : "Show Markdown source (⇧⌘M)"
-        sourceItem?.image = NSImage(systemSymbolName: source ? "doc.richtext" : "chevron.left.forwardslash.chevron.right", accessibilityDescription: sourceItem?.label)
+        updateSourceItem()
+        window?.subtitle = source ? "Markdown source" : ""
         editor.needsDisplay = true
         updateStatus()
+    }
+
+    private func updateSourceItem() {
+        sourceItem?.label = editor.sourceMode ? "Rendered Editor" : "Markdown Source"
+        sourceItem?.toolTip = editor.sourceMode ? "Show rendered editor (⇧⌘M)" : "Show Markdown source (⇧⌘M)"
+        sourceItem?.image = NSImage(systemSymbolName: editor.sourceMode ? "doc.richtext" : "chevron.left.forwardslash.chevron.right", accessibilityDescription: sourceItem?.label)
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
@@ -186,11 +242,6 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         }
         let item = NSToolbarItem(itemIdentifier: identifier)
         if identifier.rawValue == "style" {
-            stylePicker.addItems(withTitles: ["Body", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6", "Bullet List", "Numbered List", "Quote", "Code Block"])
-            stylePicker.target = self
-            stylePicker.action = #selector(selectStyle)
-            stylePicker.setAccessibilityLabel("Paragraph style")
-            stylePicker.frame = NSRect(x: 0, y: 0, width: 125, height: 26)
             item.view = stylePicker
             item.label = "Paragraph Style"
             return item
@@ -208,7 +259,10 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         item.action = action
         item.target = identifier.rawValue == "source" ? self : editor
-        if identifier.rawValue == "source" { sourceItem = item }
+        if identifier.rawValue == "source" {
+            sourceItem = item
+            updateSourceItem()
+        }
         return item
     }
 
