@@ -212,6 +212,7 @@ extension EditorTests {
             type(String(repeating: "#", count: level) + " ", in: controller.editor)
             XCTAssertEqual(controller.editor.string, "")
             XCTAssertEqual(controller.editor.typingAttributes[.block] as? String, "h\(level)")
+            XCTAssertEqual(controller.stylePicker.titleOfSelectedItem, "Heading \(level)")
             type("Title", in: controller.editor)
             controller.editor.insertNewline(nil)
             type("Body", in: controller.editor)

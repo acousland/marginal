@@ -97,6 +97,8 @@ final class EditorTextView: NSTextView {
         replaceWithUndo(range: paragraph, replacement: replacement, action: "Markdown Shortcut")
         setSelectedRange(NSRange(location: paragraph.location + (marker as NSString).length, length: 0))
         typingAttributes = next
+        // Empty headings have no character attributes for the style picker to inspect.
+        delegate?.textViewDidChangeSelection?(Notification(name: NSTextView.didChangeSelectionNotification, object: self))
         return true
     }
 
