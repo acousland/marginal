@@ -6,6 +6,15 @@
     <description>Updates for Marginal for macOS</description>
     <language>en</language>
     <item>
+      <title>Marginal 1.2.3</title>
+      <pubDate>Fri, 09 Oct 2026 03:24:41 GMT</pubDate>
+      <sparkle:version>1.2.3</sparkle:version>
+      <sparkle:shortVersionString>1.2.3</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;p&gt;Zoom in and out with ⌘+ / ⌘− or a trackpad pinch. Use ⌘0 to return to actual size.&lt;/p&gt;&lt;p&gt;Toggle Word Wrap from View. Wrap is on by default; turn it off for horizontal scrolling through long paragraphs and code.&lt;/p&gt;&lt;p&gt;Zoom and wrap work in both rendered and source mode, and are remembered for new windows. View changes leave your saved Markdown untouched.&lt;/p&gt;</description>
+      <enclosure url="https://github.com/acousland/marginal/releases/download/v1.2.3/Marginal-1.2.3-macOS.zip" sparkle:edSignature="/1VtQtwXlK41uyjiTctPTAf3Vm94rw4YdsiwKKJ2yNnDMELmcz3bQvRKoLX/uGZIt7neQ/l69k43+gVFeGHBDg==" length="1813697" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Marginal 1.2.2</title>
       <pubDate>Fri, 09 Oct 2026 03:15:00 GMT</pubDate>
       <sparkle:version>1.2.2</sparkle:version>
