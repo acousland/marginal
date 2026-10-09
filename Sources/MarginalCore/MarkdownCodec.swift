@@ -165,36 +165,16 @@ public enum MarkdownCodec {
     }
 
     private static func renderTable(_ table: Markdown.Table, to output: NSMutableAttributedString, baseURL: URL?, quote: Int) {
-        let native = NSTextTable()
-        native.numberOfColumns = max(1, table.maxColumnCount)
-        native.collapsesBorders = true
-        native.hidesEmptyCells = false
-        native.setValue(100, type: .percentageValueType, for: .width)
-        let id = UUID().uuidString
         let rows: [[any Markup]] = [Array(table.head.children)] + table.body.children.map { Array($0.children) }
-        for (rowIndex, cells) in rows.enumerated() {
-            for (column, cell) in cells.enumerated() {
-                let block = NSTextTableBlock(table: native, startingRow: rowIndex, rowSpan: 1, startingColumn: column, columnSpan: 1)
-                block.setWidth(8, type: .absoluteValueType, for: .padding)
-                block.setWidth(0.5, type: .absoluteValueType, for: .border)
-                block.setBorderColor(.separatorColor)
-                if rowIndex == 0 { block.backgroundColor = .quaternaryLabelColor }
-                var attrs = MarkdownStyle.attributes(block: "table", quoteDepth: quote)
-                attrs[.tableID] = id
-                attrs[.tableRow] = rowIndex
-                attrs[.tableColumn] = column
-                let alignment = column < table.columnAlignments.count ? table.columnAlignments[column] : nil
-                attrs[.tableAlignment] = alignment.map { String(describing: $0) } ?? "none"
-                let style = (attrs[.paragraphStyle] as! NSParagraphStyle).mutableCopy() as! NSMutableParagraphStyle
-                style.textBlocks = [block]
-                style.paragraphSpacing = 0
-                style.alignment = alignment == .center ? .center : alignment == .right ? .right : .left
-                attrs[.paragraphStyle] = style
-                // Header emphasis is visual; do not inject ** into the original cell content.
-                if rowIndex == 0 { attrs[.font] = NSFont.systemFont(ofSize: 16, weight: .semibold) }
-                appendInlineBlock(cell, attributes: attrs, to: output, baseURL: baseURL)
+        let cells = rows.map { row in
+            row.map { node -> NSAttributedString in
+                let cell = NSMutableAttributedString()
+                for child in node.children { renderInline(child, attributes: [.block: "table"], to: cell, baseURL: baseURL) }
+                return cell
             }
         }
+        let alignments = table.columnAlignments.map { $0.map { String(describing: $0) } ?? "none" }
+        output.append(MarkdownTable.render(cells: cells, alignments: alignments, quoteDepth: quote))
     }
 
     private static func appendInlineBlock(_ node: any Markup, block: String, to output: NSMutableAttributedString, baseURL: URL?, depth: Int, quote: Int) {
@@ -203,6 +183,12 @@ public enum MarkdownCodec {
 
     private static func appendInlineBlock(_ node: any Markup, attributes: [NSAttributedString.Key: Any], prefix: String = "", to output: NSMutableAttributedString, baseURL: URL?) {
         var attrs = attributes
+        if output.length > 0, output.attribute(.block, at: output.length - 1, effectiveRange: nil) as? String == "table",
+           let paragraphStyle = attrs[.paragraphStyle] as? NSParagraphStyle {
+            let style = paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+            style.paragraphSpacingBefore = max(14, style.paragraphSpacingBefore)
+            attrs[.paragraphStyle] = style
+        }
         attrs[.blockID] = UUID().uuidString
         output.append(NSAttributedString(string: prefix, attributes: attrs))
         for child in node.children { renderInline(child, attributes: attrs, to: output, baseURL: baseURL) }
@@ -221,6 +207,9 @@ public enum MarkdownCodec {
             output.append(run); return
         }
         if let html = node as? InlineHTML {
+            if attrs[.block] as? String == "table", ["<br>", "<br/>", "<br />"].contains(html.rawHTML.lowercased()) {
+                output.append(NSAttributedString(string: "\u{2028}", attributes: attrs)); return
+            }
             attrs[.literal] = true
             output.append(NSAttributedString(string: html.rawHTML, attributes: attrs)); return
         }

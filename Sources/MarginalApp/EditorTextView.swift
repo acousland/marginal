@@ -3,6 +3,102 @@ import MarginalCore
 
 final class EditorTextView: NSTextView {
     var sourceMode = false
+    private var isPasting = false
+    private var structuralChange = false
+
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if let enabled = tableMenuValidation(menuItem) { return enabled }
+        return super.validateMenuItem(menuItem)
+    }
+
+    override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        let selection = replacementRange.location == NSNotFound ? selectedRange() : replacementRange
+        if !isPasting, !hasMarkedText(), insertString as? String == " ",
+           applyTypingShortcut(at: selection, fencedCode: false) { return }
+        if !sourceMode, let text = insertString as? String, let storage = textStorage,
+           selection.location < storage.length, storage.attribute(.tableID, at: selection.location, effectiveRange: nil) != nil {
+            var tableRange = NSRange()
+            _ = storage.attribute(.tableID, at: selection.location, longestEffectiveRange: &tableRange,
+                                  in: NSRange(location: 0, length: storage.length))
+            if selection.location <= tableRange.location, NSMaxRange(selection) >= NSMaxRange(tableRange) {
+                super.insertText(NSAttributedString(string: text, attributes: MarkdownStyle.attributes()), replacementRange: replacementRange)
+                return
+            }
+            let cellText = text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+                .replacingOccurrences(of: "\n", with: "\u{2028}").replacingOccurrences(of: "\u{2029}", with: "\u{2028}")
+            super.insertText(cellText, replacementRange: replacementRange)
+        } else { super.insertText(insertString, replacementRange: replacementRange) }
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        if !sourceMode, !structuralChange, replacementString != nil,
+           !preservesTableBoundaries(in: affectedCharRange) { return false }
+        return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+    }
+
+    private func preservesTableBoundaries(in range: NSRange) -> Bool {
+        guard let storage = textStorage, NSMaxRange(range) <= storage.length else { return false }
+        let text = storage.string as NSString
+        for index in range.location..<NSMaxRange(range) {
+            if text.character(at: index) == 10, storage.attribute(.tableID, at: index, effectiveRange: nil) != nil {
+                var tableRange = NSRange()
+                _ = storage.attribute(.tableID, at: index, longestEffectiveRange: &tableRange,
+                                      in: NSRange(location: 0, length: storage.length))
+                // Whole tables can be replaced. Partial edits must retain cell separators.
+                if range.location > tableRange.location || NSMaxRange(range) < NSMaxRange(tableRange) { return false }
+            }
+        }
+        return true
+    }
+
+    override func didChangeText() {
+        if !sourceMode, string.isEmpty, typingAttributes[.tableID] != nil { typingAttributes = MarkdownStyle.attributes() }
+        super.didChangeText()
+    }
+
+    /// Only transform a marker typed at the start of an ordinary paragraph.
+    private func applyTypingShortcut(at selection: NSRange, fencedCode: Bool) -> Bool {
+        guard !sourceMode, selection.length == 0, let storage = textStorage else { return false }
+        let text = string as NSString
+        let paragraph = text.paragraphRange(for: selection)
+        let attrs = paragraph.location < storage.length ? storage.attributes(at: paragraph.location, effectiveRange: nil) : typingAttributes
+        guard (attrs[.block] as? String ?? "p") == "p", attrs[.tableID] == nil else { return false }
+        guard selection.location - paragraph.location <= 80 else { return false }
+        let prefix = text.substring(with: NSRange(location: paragraph.location, length: selection.location - paragraph.location))
+        var kind: String
+        var number = 1
+        var language = ""
+        if prefix.hasPrefix("```"), !prefix.dropFirst(3).contains(where: { $0.isWhitespace || $0 == "`" }) {
+            kind = "code"
+            language = String(prefix.dropFirst(3))
+        } else if fencedCode { return false }
+        else if (1...6).contains(prefix.count), prefix.allSatisfy({ $0 == "#" }) { kind = "h\(prefix.count)" }
+        else if ["-", "*", "+"].contains(prefix) { kind = "ul" }
+        else if prefix == ">" { kind = "quote" }
+        else if prefix.last == "." || prefix.last == ")" {
+            let digits = prefix.dropLast()
+            guard (1...9).contains(digits.count), digits.utf8.allSatisfy({ (48...57).contains($0) }), let value = Int(digits) else { return false }
+            kind = "ol"; number = value
+        } else { return false }
+        var next = MarkdownStyle.attributes(block: kind == "quote" ? "p" : kind,
+                                            quoteDepth: kind == "quote" ? (attrs[.quoteDepth] as? Int ?? 0) + 1 : attrs[.quoteDepth] as? Int ?? 0)
+        next[.blockID] = UUID().uuidString
+        if kind == "code" { next[.language] = language }
+        if kind == "ol" { next[.listNumber] = number }
+        let tail = NSRange(location: selection.location, length: NSMaxRange(paragraph) - selection.location)
+        let replacement = NSMutableAttributedString(attributedString: storage.attributedSubstring(from: tail))
+        let full = NSRange(location: 0, length: replacement.length)
+        for key: NSAttributedString.Key in [.block, .blockID, .depth, .quoteDepth, .listNumber, .task, .language] { replacement.removeAttribute(key, range: full) }
+        replacement.addAttributes(next, range: full)
+        MarkdownStyle.restyle(replacement, range: full)
+        let marker = kind == "ul" ? "•\t" : kind == "ol" ? "\(number).\t" : ""
+        replacement.insert(NSAttributedString(string: marker, attributes: next), at: 0)
+        breakUndoCoalescing()
+        replaceWithUndo(range: paragraph, replacement: replacement, action: "Markdown Shortcut")
+        setSelectedRange(NSRange(location: paragraph.location + (marker as NSString).length, length: 0))
+        typingAttributes = next
+        return true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -15,16 +111,42 @@ final class EditorTextView: NSTextView {
     override func paste(_ sender: Any?) {
         // Avoid importing arbitrary web/Word rich text that cannot survive Markdown save.
         guard let text = NSPasteboard.general.string(forType: .string) else { super.pasteAsPlainText(sender); return }
+        isPasting = true
+        defer { isPasting = false }
         insertText(text, replacementRange: selectedRange())
+    }
+
+    override func insertTab(_ sender: Any?) {
+        if !moveBetweenCells(backwards: false) { super.insertTab(sender) }
+    }
+
+    override func insertBacktab(_ sender: Any?) {
+        if !moveBetweenCells(backwards: true) { super.insertBacktab(sender) }
     }
 
     override func insertNewline(_ sender: Any?) {
         guard !sourceMode, let storage = textStorage else { super.insertNewline(sender); return }
         let selection = selectedRange()
+        guard preservesTableBoundaries(in: selection) else { return }
         let nsString = string as NSString
         let line = nsString.paragraphRange(for: selection)
         let attrs = line.location < storage.length ? storage.attributes(at: line.location, effectiveRange: nil) : typingAttributes
         let kind = attrs[.block] as? String ?? "p"
+        if kind == "p", applyTypingShortcut(at: selection, fencedCode: true) { return }
+        if kind == "table" {
+            // Keep Return inside a cell without creating a new native table paragraph.
+            insertText("\u{2028}", replacementRange: selection)
+            return
+        }
+        if kind == "code", selection.length == 0,
+           nsString.substring(with: line).trimmingCharacters(in: .newlines) == "```" {
+            let next = MarkdownStyle.attributes()
+            breakUndoCoalescing()
+            replaceWithUndo(range: line, replacement: NSAttributedString(string: "\n", attributes: next), action: "End Code Block")
+            setSelectedRange(NSRange(location: line.location, length: 0))
+            typingAttributes = next
+            return
+        }
         if kind == "ul" || kind == "ol" {
             let visible = nsString.substring(with: line).trimmingCharacters(in: .newlines)
             let contents = visible.components(separatedBy: "\t").dropFirst().joined(separator: "\t")
@@ -67,13 +189,24 @@ final class EditorTextView: NSTextView {
     }
 
     func replaceWithUndo(range: NSRange, replacement: NSAttributedString, action: String) {
-        guard let storage = textStorage, shouldChangeText(in: range, replacementString: replacement.string) else { return }
+        guard let storage = textStorage else { return }
+        // NSTextView registers its own string undo in shouldChangeText. This operation
+        // supplies an attributed undo, so registering both would apply the edit twice.
+        let manager = undoManager
+        manager?.disableUndoRegistration()
+        structuralChange = true
+        let approved = shouldChangeText(in: range, replacementString: replacement.string)
+        structuralChange = false
+        manager?.enableUndoRegistration()
+        guard approved else { return }
         let old = storage.attributedSubstring(from: range)
         let oldSelection = selectedRange()
+        let oldTypingAttributes = typingAttributes
         let newRange = NSRange(location: range.location, length: replacement.length)
         undoManager?.registerUndo(withTarget: self) { target in
             target.replaceWithUndo(range: newRange, replacement: old, action: action)
             target.setSelectedRange(oldSelection)
+            target.typingAttributes = oldTypingAttributes
         }
         storage.replaceCharacters(in: range, with: replacement)
         setSelectedRange(NSRange(location: min(NSMaxRange(newRange), storage.length), length: 0))

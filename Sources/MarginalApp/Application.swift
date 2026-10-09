@@ -156,6 +156,9 @@ mainMenu.addItem(submenu("Format", items: [
     menuItem("Add Link…", #selector(EditorTextView.insertLink(_:)), "k"),
     menuItem("Remove Link", #selector(EditorTextView.removeLink(_:)))
 ]))
+let tableMenuItem = NSMenuItem(title: "Table", action: nil, keyEquivalent: "")
+tableMenuItem.submenu = EditorTextView.tableMenu()
+mainMenu.addItem(tableMenuItem)
 mainMenu.addItem(submenu("View", items: [
     menuItem("Toggle Markdown Source", #selector(EditorWindowController.toggleSource(_:)), "m", modifiers: [.command, .shift]),
     menuItem("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", modifiers: [.command, .control])

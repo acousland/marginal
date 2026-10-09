@@ -27,6 +27,27 @@ Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open
 | Find | ⌘F |
 | Markdown source / Rendered editor | ⇧⌘M |
 
+## Typing shortcuts
+
+At the start of a body paragraph, type a marker followed by **Space**. The marker disappears and the paragraph changes style:
+
+| Type, then Space | Style |
+| --- | --- |
+| `#` through `######` | Heading 1–6 |
+| `-`, `*`, or `+` | Bullet list |
+| `1.` or `1)` | Numbered list (other starting numbers work too) |
+| `>` | Quote |
+
+Type three backticks (optionally followed by a language such as `swift`) and press **Return** to start a code block. Type three backticks on their own line and press Return to leave it. Return after a heading starts body text; Return continues a list, and Return on an empty list item exits it. Undo restores the typed marker. Shortcuts apply while typing in the rendered editor; source and code content remain literal.
+
+## Tables
+
+Use the **table button in the toolbar** or **Table → Insert Table…** to create a table with a header and the number of body rows and columns you choose. Click a cell, then use the same menu to add or delete rows and columns, align a column, or delete the table. These changes preserve cell formatting and support undo/redo. The required header row and final column cannot be deleted individually.
+
+**Tab** and **Shift-Tab** move between cells; Tab from the last cell adds a row. **Return** inserts a line break inside a cell. **Table → Paragraph After Table** moves you out of the table to keep writing. Use the Table controls to change structure; Backspace and Delete protect cell boundaries.
+
+![Native table editing](docs/tables.png)
+
 ## Updates
 
 Choose **Marginal → Check for Updates…** to check the latest stable GitHub release immediately. Automatic checks are enabled by default and run at most once every 24 hours, after launch or while the app stays open. Toggle **Automatically Check for Updates** in the same menu to turn them off.
@@ -45,7 +66,7 @@ Update checks send an HTTPS request to GitHub with the app version in its User-A
 
 Untouched files save byte for byte. Editing produces equivalent Markdown with normalized spacing, escaping, and inline links. Files must be UTF-8.
 
-Keep advanced syntax edits in the source view: table row/column changes, task checkboxes, complex list items with multiple paragraphs, and metadata/HTML. YAML front matter, HTML, and unsupported blocks are displayed as preserved source. Remote images use a placeholder; the document's image URL is retained. Moving a document with relative image paths keeps those paths unchanged.
+Keep advanced syntax edits in the source view: task checkboxes, complex list items with multiple paragraphs, and metadata/HTML. YAML front matter, HTML, and unsupported blocks are displayed as preserved source. Remote images use a placeholder; the document's image URL is retained. Moving a document with relative image paths keeps those paths unchanged.
 
 ## Build
 
@@ -71,7 +92,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.1.0 scripts/release.sh
+VERSION=1.2.0 scripts/release.sh
 ```
 
 First save notarization credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.

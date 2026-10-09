@@ -62,7 +62,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         editor.backgroundColor = .textBackgroundColor
         editor.insertionPointColor = .labelColor
-        editor.typingAttributes = MarkdownStyle.attributes()
+        editor.typingAttributes = editor.textStorage!.length > 0 ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : MarkdownStyle.attributes()
         editor.textContainerInset = NSSize(width: 65, height: 35)
         editor.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue]
     }
@@ -115,12 +115,14 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         guard !editor.sourceMode else { return }
         let location = editor.selectedRange().location
         let kind = location < editor.textStorage!.length ? editor.textStorage!.attribute(.block, at: location, effectiveRange: nil) as? String ?? "p" : editor.typingAttributes[.block] as? String ?? "p"
-        let kinds = ["p", "h1", "h2", "h3", "ul", "ol", "quote", "code"]
-        stylePicker.selectItem(at: kinds.firstIndex(of: kind) ?? 0)
+        let kinds = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "quote", "code"]
+        let quote = location < editor.textStorage!.length ? editor.textStorage!.attribute(.quoteDepth, at: location, effectiveRange: nil) as? Int ?? 0 : editor.typingAttributes[.quoteDepth] as? Int ?? 0
+        stylePicker.selectItem(at: kinds.firstIndex(of: kind == "p" && quote > 0 ? "quote" : kind) ?? 0)
+        stylePicker.isEnabled = kind != "table"
     }
 
     func refreshAfterRead() {
-        editor.typingAttributes = editor.sourceMode ? [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor] : MarkdownStyle.attributes()
+        editor.typingAttributes = editor.sourceMode ? [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor] : editor.textStorage!.length > 0 ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : MarkdownStyle.attributes()
         editor.setSelectedRange(NSRange(location: 0, length: 0))
         editor.needsDisplay = true
         updateStatus()
@@ -133,7 +135,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     }
 
     @objc func selectStyle(_ sender: NSPopUpButton) {
-        let kinds = ["p", "h1", "h2", "h3", "ul", "ol", "quote", "code"]
+        let kinds = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "quote", "code"]
         editor.formatBlock(kinds[sender.indexOfSelectedItem])
         window?.makeFirstResponder(editor)
     }
@@ -170,12 +172,21 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { toolbarDefaultItemIdentifiers(toolbar) }
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.init("style"), .init("bold"), .init("italic"), .init("code"), .init("link"), .flexibleSpace, .init("source")]
+        [.init("style"), .init("bold"), .init("italic"), .init("code"), .init("link"), .init("table"), .flexibleSpace, .init("source")]
     }
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier, willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        if identifier.rawValue == "table" {
+            let item = NSMenuToolbarItem(itemIdentifier: identifier)
+            item.label = "Table"
+            item.toolTip = "Insert a table or edit the selected table"
+            item.image = NSImage(systemSymbolName: "tablecells", accessibilityDescription: "Table")
+            item.menu = EditorTextView.tableMenu(target: editor)
+            item.showsIndicator = true
+            return item
+        }
         let item = NSToolbarItem(itemIdentifier: identifier)
         if identifier.rawValue == "style" {
-            stylePicker.addItems(withTitles: ["Body", "Heading 1", "Heading 2", "Heading 3", "Bullet List", "Numbered List", "Quote", "Code Block"])
+            stylePicker.addItems(withTitles: ["Body", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6", "Bullet List", "Numbered List", "Quote", "Code Block"])
             stylePicker.target = self
             stylePicker.action = #selector(selectStyle)
             stylePicker.setAccessibilityLabel("Paragraph style")

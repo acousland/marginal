@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version=${VERSION:-1.1.0}
+version=${VERSION:-1.2.0}
 configuration=${CONFIGURATION:-release}
 mkdir -p dist
 if [[ ${UNIVERSAL:-1} == 1 ]]; then

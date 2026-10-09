@@ -200,3 +200,250 @@ final class EditorTests: XCTestCase {
         document.close()
     }
 }
+
+extension EditorTests {
+    private func type(_ text: String, in view: EditorTextView) {
+        for character in text { view.insertText(String(character), replacementRange: view.selectedRange()) }
+    }
+
+    func testTypedHeadingMarkersBecomeHeadingsAndReturnToBody() throws {
+        for level in 1...6 {
+            let (document, controller) = try editor("")
+            type(String(repeating: "#", count: level) + " ", in: controller.editor)
+            XCTAssertEqual(controller.editor.string, "")
+            XCTAssertEqual(controller.editor.typingAttributes[.block] as? String, "h\(level)")
+            type("Title", in: controller.editor)
+            controller.editor.insertNewline(nil)
+            type("Body", in: controller.editor)
+            XCTAssertEqual(document.markdown(), String(repeating: "#", count: level) + " Title\n\nBody\n")
+        }
+    }
+
+    func testInlineTypingStylePersistsAsCursorAdvances() throws {
+        let (document, controller) = try editor("Hello world\n")
+        controller.editor.setSelectedRange(NSRange(location: 6, length: 0))
+        controller.editor.bold(nil)
+        type("New", in: controller.editor)
+        XCTAssertEqual(document.markdown(), "Hello **New**world\n")
+    }
+
+    func testHeadingShortcutInFrontOfExistingUnicodeTextAndUndo() throws {
+        let (document, controller) = try editor("Café 🐈\n")
+        controller.editor.setSelectedRange(NSRange(location: 0, length: 0))
+        type("##", in: controller.editor)
+        controller.editor.breakUndoCoalescing()
+        while document.undoManager!.groupingLevel > 0 { document.undoManager!.endUndoGrouping() }
+        document.undoManager!.beginUndoGrouping()
+        type(" ", in: controller.editor)
+        XCTAssertEqual(document.markdown(), "## Café 🐈\n")
+        XCTAssertEqual(controller.editor.selectedRange().location, 0)
+        undo(document)
+        XCTAssertEqual(controller.editor.string, "##Café 🐈\n")
+        XCTAssertEqual(controller.editor.textStorage?.attribute(.block, at: 0, effectiveRange: nil) as? String, "p")
+        document.undoManager!.redo()
+        XCTAssertEqual(document.markdown(), "## Café 🐈\n")
+    }
+
+    func testTypedListAndQuoteShortcuts() throws {
+        for (marker, expected) in [("-", "- Item\n"), ("*", "- Item\n"), ("+", "- Item\n"),
+                                   ("3.", "3. Item\n"), ("1)", "1. Item\n"), (">", "> Item\n")] {
+            let (document, controller) = try editor("")
+            type(marker + " Item", in: controller.editor)
+            XCTAssertEqual(document.markdown(), expected)
+        }
+        let (document, controller) = try editor("")
+        type("3. First", in: controller.editor)
+        controller.editor.insertNewline(nil)
+        type("Second", in: controller.editor)
+        XCTAssertEqual(document.markdown(), "3. First\n4. Second\n")
+    }
+
+    func testTypingShortcutsStayLiteralInSourceCodeTablesAndMidParagraph() throws {
+        for source in ["Words text", "```\n\n```\n", "| A |\n| --- |\n| B |\n"] {
+            let (_, controller) = try editor(source)
+            controller.editor.setSelectedRange(NSRange(location: source.hasPrefix("Words") ? 6 : 0, length: 0))
+            type("## ", in: controller.editor)
+            XCTAssertTrue(controller.editor.string.contains("## "))
+        }
+        let (_, controller) = try editor("")
+        controller.toggleSource(nil)
+        type("## ", in: controller.editor)
+        XCTAssertEqual(controller.editor.string, "## ")
+        controller.toggleSource(nil)
+        let (_, body) = try editor("")
+        type("####### ", in: body.editor)
+        XCTAssertEqual(body.editor.string, "####### ")
+    }
+
+    func testFencedCodeShortcutAndExit() throws {
+        let (document, controller) = try editor("")
+        type("```swift", in: controller.editor)
+        controller.editor.insertNewline(nil)
+        type("let value = 1", in: controller.editor)
+        controller.editor.insertNewline(nil)
+        type("```", in: controller.editor)
+        controller.editor.insertNewline(nil)
+        type("Body", in: controller.editor)
+        XCTAssertEqual(document.markdown(), "```swift\nlet value = 1\n```\n\nBody\n")
+    }
+
+    func testInsertTableAndUndoKeepsSurroundingParagraphs() throws {
+        let (document, controller) = try editor("Before after\n")
+        controller.editor.setSelectedRange(NSRange(location: 7, length: 0))
+        controller.editor.insertTable(rows: 3, columns: 2)
+        let saved = document.markdown()
+        XCTAssertTrue(saved.hasPrefix("Before \n\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\n|  |  |\n\nafter\n"), saved)
+        XCTAssertEqual(controller.editor.selectedRange().length, 8)
+        XCTAssertEqual(controller.editor.currentTable()?.cells.count, 3)
+        undo(document)
+        XCTAssertEqual(controller.editor.string, "Before after\n")
+        document.undoManager!.redo()
+        XCTAssertTrue(document.markdown().contains("| Column 1 | Column 2 |"))
+    }
+
+    func testTableRowAndColumnControlsPreserveInlineFormattingAndAlignment() throws {
+        let source = "Before\n\n| Name | State |\n| --- | :---: |\n| **Marginal** | [Ready](https://example.com) |\n\nAfter\n"
+        let (document, controller) = try editor(source)
+        let view = controller.editor
+        let range = (view.string as NSString).range(of: "Ready")
+        view.setSelectedRange(NSRange(location: range.location, length: 0))
+        view.addRowAbove(nil)
+        XCTAssertEqual(view.currentTable()?.cells.count, 3)
+        XCTAssertEqual(view.currentTable()?.row, 1)
+        view.addColumnBefore(nil)
+        XCTAssertEqual(view.currentTable()?.alignments, ["none", "none", "center"])
+        view.alignColumnRight(nil)
+        view.insertText("Added", replacementRange: view.selectedRange())
+        let saved = document.markdown()
+        XCTAssertTrue(saved.contains("| --- | ---: | :---: |"), saved)
+        XCTAssertTrue(saved.contains("| **Marginal** |  | [Ready](<https://example.com>) |"), saved)
+        XCTAssertTrue(saved.contains("Before\n\n"))
+        XCTAssertTrue(saved.hasSuffix("\n\nAfter\n"))
+        view.deleteColumn(nil)
+        view.deleteRow(nil)
+        XCTAssertEqual(document.markdown(), MarkdownCodec.serialize(MarkdownCodec.render(source)))
+        let reopened = MarkdownCodec.render(document.markdown())
+        XCTAssertTrue(reopened.string.contains("Marginal"))
+    }
+
+    func testDeleteTableIsUndoableAndKeepsAdjacentTablesSeparate() throws {
+        let source = "| A |\n| --- |\n| B |\n\n| C |\n| --- |\n| D |\n"
+        let (document, controller) = try editor(source)
+        controller.editor.setSelectedRange(NSRange(location: 0, length: 0))
+        controller.editor.deleteTable(nil)
+        XCTAssertEqual(document.markdown(), "| C |\n| --- |\n| D |\n")
+        undo(document)
+        XCTAssertEqual(document.markdown(), source)
+        document.undoManager!.beginUndoGrouping()
+        controller.editor.setSelectedRange(NSRange(location: 0, length: 0))
+        controller.editor.addRowBelow(nil)
+        XCTAssertEqual(controller.editor.currentTable()?.cells.count, 3)
+        XCTAssertTrue(document.markdown().hasSuffix("\n\n| C |\n| --- |\n| D |\n"))
+    }
+
+    func testTabMovesAcrossCellsAndAddsRowAtEnd() throws {
+        let (document, controller) = try editor("| A | B |\n| --- | --- |\n| C | D |\n")
+        let view = controller.editor
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        view.insertTab(nil)
+        XCTAssertEqual(view.currentTable()?.column, 1)
+        XCTAssertEqual(view.selectedRange().length, 1)
+        view.insertBacktab(nil)
+        XCTAssertEqual(view.currentTable()?.column, 0)
+        let last = (view.string as NSString).range(of: "D")
+        view.setSelectedRange(NSRange(location: last.location, length: 0))
+        view.insertTab(nil)
+        XCTAssertEqual(view.currentTable()?.row, 2)
+        XCTAssertEqual(view.currentTable()?.column, 0)
+        type("E", in: view)
+        XCTAssertTrue(document.markdown().hasSuffix("| E |  |\n"))
+    }
+
+    func testTableReturnStaysInCellAndParagraphAfterTableExits() throws {
+        let (document, controller) = try editor("| A |\n| --- |\n| B |\n")
+        let view = controller.editor
+        let cell = (view.string as NSString).range(of: "B")
+        view.setSelectedRange(NSRange(location: NSMaxRange(cell), length: 0))
+        view.insertNewline(nil)
+        type("Next", in: view)
+        XCTAssertEqual(view.currentTable()?.cells.count, 2)
+        XCTAssertTrue(document.markdown().contains("| B<br>Next |"), document.markdown())
+        view.addColumnAfter(nil)
+        XCTAssertTrue(document.markdown().contains("| B<br>Next |  |"), document.markdown())
+        let reopened = MarkdownCodec.render(document.markdown())
+        XCTAssertTrue(reopened.string.contains("B\u{2028}Next"))
+        XCTAssertEqual(MarkdownCodec.serialize(reopened), document.markdown())
+        view.paragraphAfterTable(nil)
+        type("Body", in: view)
+        XCTAssertTrue(document.markdown().hasSuffix("\n\nBody\n"), document.markdown())
+        XCTAssertNil(view.currentTable())
+    }
+
+    func testTableMenuProtectsHeaderAndFinalColumnAndDisablesSourceControls() throws {
+        let (_, controller) = try editor("| A |\n| --- |\n| B |\n")
+        let view = controller.editor
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        let menu = EditorTextView.tableMenu(target: view)
+        func enabled(_ title: String) throws -> Bool { view.validateMenuItem(try XCTUnwrap(menu.items.first { $0.title == title })) }
+        XCTAssertFalse(try enabled("Delete Row"))
+        XCTAssertFalse(try enabled("Add Row Above"))
+        XCTAssertFalse(try enabled("Delete Column"))
+        XCTAssertTrue(try enabled("Add Row Below"))
+        XCTAssertFalse(try enabled("Insert Table…"))
+        controller.toggleSource(nil)
+        XCTAssertFalse(try enabled("Add Row Below"))
+        XCTAssertFalse(try enabled("Insert Table…"))
+    }
+
+    func testTableCellBoundariesAndMultilinePasting() throws {
+        let (document, controller) = try editor("| A | B |\n| --- | --- |\n| C | D |\n")
+        let view = controller.editor
+        let first = view.string as NSString
+        let start = first.range(of: "D").location
+        view.setSelectedRange(NSRange(location: start, length: 0))
+        view.deleteBackward(nil)
+        XCTAssertEqual(view.string, first as String)
+        view.insertText("Line 1\nLine 2\r\n", replacementRange: view.selectedRange())
+        XCTAssertTrue(document.markdown().contains("Line 1<br>Line 2<br>D"), document.markdown())
+        view.setSelectedRange(NSRange(location: 0, length: view.string.utf16.count))
+        XCTAssertFalse(view.canInsertTable)
+        view.insertTable(rows: 2, columns: 2)
+        XCTAssertTrue(document.markdown().contains("Line 1<br>Line 2<br>D"))
+        let (_, other) = try editor("Before\n\n| A |\n| --- |\n| B |\n")
+        let before = other.editor.string
+        other.editor.setSelectedRange(NSRange(location: 0, length: (before as NSString).range(of: "B", options: .backwards).location))
+        other.editor.insertNewline(nil)
+        XCTAssertEqual(other.editor.string, before)
+    }
+
+    func testSelectingWholeTableCanReplaceItWithBodyTextAndUndo() throws {
+        let (document, controller) = try editor("| A |\n| --- |\n| B |\n")
+        let view = controller.editor
+        view.setSelectedRange(NSRange(location: 0, length: view.string.utf16.count))
+        view.insertText("Body", replacementRange: view.selectedRange())
+        XCTAssertEqual(document.markdown(), "Body\n")
+        XCTAssertNil(view.currentTable())
+        undo(document)
+        XCTAssertEqual(document.markdown(), "| A |\n| --- |\n| B |\n")
+        document.undoManager!.beginUndoGrouping()
+        view.setSelectedRange(NSRange(location: 0, length: view.string.utf16.count))
+        view.deleteBackward(nil)
+        type("Body", in: view)
+        XCTAssertEqual(document.markdown(), "Body\n")
+    }
+
+    func testEditedNativeTableRendersToImage() throws {
+        let (_, controller) = try editor("# Tables, without the pipes\n\nClick a cell and use the Table menu to change its structure.\n\n| Feature | Status |\n| :--- | :---: |\n| **Headings** | Ready |\n| Tables | Editable |\n\nKeep writing below your table.\n")
+        controller.editor.setSelectedRange((controller.editor.string as NSString).range(of: "Editable"))
+        controller.editor.addColumnAfter(nil)
+        controller.editor.insertText("Notes", replacementRange: controller.editor.selectedRange())
+        controller.window?.appearance = NSAppearance(named: .aqua)
+        let view = try XCTUnwrap(controller.window?.contentView?.superview)
+        view.layoutSubtreeIfNeeded()
+        controller.editor.layoutManager?.ensureLayout(for: controller.editor.textContainer!)
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/marginal-tables.png"))
+        XCTAssertGreaterThan(bitmap.pixelsWide, 500)
+    }
+}
