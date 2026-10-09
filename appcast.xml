@@ -1,9 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <title>Marginal for macOS</title>
     <link>https://github.com/acousland/marginal</link>
     <description>Updates for Marginal for macOS</description>
     <language>en</language>
+    <item>
+      <title>Marginal 1.2.1</title>
+      <pubDate>Fri, 09 Oct 2026 02:59:09 GMT</pubDate>
+      <sparkle:version>1.2.1</sparkle:version>
+      <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;p&gt;Download and install updates inside Marginal, using the same Sparkle updater as Mondrian.&lt;/p&gt;&lt;p&gt;Choose whether to check for updates automatically and whether to download and install them automatically from the Marginal menu.&lt;/p&gt;&lt;p&gt;Updates are verified against Marginal’s signing key before installation. Existing automatic-check preferences are preserved.&lt;/p&gt;</description>
+      <enclosure url="https://github.com/acousland/marginal/releases/download/v1.2.1/Marginal-1.2.1-macOS.zip" sparkle:edSignature="c57nkGrYbVt618DsFCjmAFqh4qgQPf3NtYA7kb3Usi3PdLdRbohw0/Kje6JRmiWTj4CxwcSsWZulv1PAVR/gDg==" length="1807183" type="application/octet-stream" />
+    </item>
   </channel>
 </rss>
