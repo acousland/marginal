@@ -4,3 +4,4 @@ dist/
 *.xcodeproj/
 .swiftpm/
 Resources/AppIcon.iconset/
+__pycache__/

@@ -10,7 +10,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Test Markdown and native editing
-        run: swift test
+        run: |
+          swift test
+          python3 scripts/test-appcast.py
       - name: Build Apple silicon app
         run: scripts/build.sh
       - name: Verify Apple silicon architecture

@@ -50,11 +50,13 @@ Use the **table button in the toolbar** or **Table → Insert Table…** to crea
 
 ## Updates
 
-Choose **Marginal → Check for Updates…** to check the latest stable GitHub release immediately. Automatic checks are enabled by default and run at most once every 24 hours, after launch or while the app stays open. Toggle **Automatically Check for Updates** in the same menu to turn them off.
+Marginal uses [Sparkle](https://sparkle-project.org/) for the same in-app update flow as Mondrian. Choose **Marginal → Check for Updates…** to check immediately, read the release notes, and download and install a newer version. Marginal relaunches after installation; unsaved documents go through the usual save prompts.
 
-A newer release produces a download prompt once per version, when Marginal is active. **Download Update** opens its GitHub release page; download the ZIP and replace the app in Applications. Background connection failures stay quiet. Manual checks report errors and when you're up to date. Drafts and prereleases are ignored.
+**Automatically Check for Updates** is enabled by default and checks about once a day. **Download and Install Updates Automatically** is optional and available while automatic checks are enabled. Both preferences are in the Marginal menu. An existing choice to disable automatic checks carries over.
 
-Update checks send an HTTPS request to GitHub with the app version in its User-Agent. Document contents and file paths remain local. Existing 1.0.x installations need this version installed once to gain update checking.
+Updates come from the public [release feed](https://raw.githubusercontent.com/acousland/marginal/main/appcast.xml). Sparkle verifies each archive against Marginal’s Ed25519 signing key before installing it. Releases are also Developer ID signed and notarized. Background connection failures stay quiet; manual checks show errors or an up-to-date result.
+
+Update checks contact GitHub over HTTPS. Document contents and file paths remain local. Install this version once to give older Marginal copies the new in-app updater.
 
 ## What it handles
 
@@ -78,7 +80,7 @@ scripts/build.sh
 open dist/Marginal.app
 ```
 
-The build script creates an Apple silicon (`arm64`) app with an ad-hoc development signature. Open `Package.swift` in Xcode to work on the app.
+The build script creates an Apple silicon (`arm64`) app with an ad-hoc development signature and an embedded Sparkle framework. Set `MARGINAL_FEED_URL=none` for a trial build without update checks. Open `Package.swift` in Xcode to work on the app.
 
 The bundle has a self-test for file-type registration and opening, editing, saving, and reopening a Markdown file. You can also check the live update endpoint without displaying UI:
 
@@ -89,18 +91,28 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 
 ## Signed releases
 
+Update the default version in `scripts/build.sh`, `scripts/release.sh`, and `Resources/Info.plist`, and write the matching `RELEASE_NOTES.md`. Commit and push the source, then publish from this Mac:
+
+```sh
+NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.1
+```
+
+The script runs the tests, builds and signs the app and Sparkle helpers with a Developer ID Application certificate, notarizes and staples the app, verifies Gatekeeper acceptance, and signs the final ZIP using the `marginal` Sparkle account in the login Keychain. It publishes the tag, archive, and checksum to GitHub, verifies the download is available, then commits and publishes the updated `appcast.xml`. The feed never offers an archive before it is uploaded. Versions must increase; both bundle version fields use the release version.
+
+On this Mac the saved notarization profile is `renoir-notary`. On another Mac, save credentials interactively using `xcrun notarytool store-credentials` and set `NOTARY_PROFILE` accordingly. Set `SIGNING_IDENTITY` to choose a particular Developer ID Application certificate.
+
+Marginal’s public update key is in `Resources/sparkle-public-key`; its private key stays in Keychain. For a new project, create a key using Sparkle’s `generate_keys --account <account>`. To release this app from another Mac, securely transfer the existing key using Sparkle’s key export/import tools. Keep credentials and private keys out of this repository.
+
+To prepare signed artifacts without publishing:
+
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.2.0 scripts/release.sh
+VERSION=1.2.1 scripts/release.sh
 ```
-
-First save notarization credentials interactively to your Keychain using Apple's `xcrun notarytool store-credentials marginal-notary`. Then set `NOTARY_PROFILE=marginal-notary` when running the release script. It submits the app, staples the ticket, verifies Gatekeeper acceptance, and creates the final ZIP and SHA-256 checksum. Keep credentials out of this repository.
-
-For future updates, increment `VERSION`, publish the corresponding `v<version>` tag, and upload `Marginal-<version>-macOS.zip` and its checksum to a stable GitHub release marked latest. The checker uses GitHub's latest-release endpoint and only offers releases with an uploaded app archive. No separate update feed is needed. The build script keeps both bundle version fields in sync with `VERSION`.
 
 ## Implementation
 
-Swift and AppKit, with native `NSTextView` editing and [Swift Markdown](https://github.com/swiftlang/swift-markdown) for CommonMark/GFM parsing. Markdown is parsed when opening a document or switching from source to rendered mode. Typing uses the native text system; Markdown serialization happens on save or when switching to source. Editing stays local and remote images are not fetched. Update checking uses a small asynchronous native URLSession request to GitHub.
+Swift and AppKit, with native `NSTextView` editing and [Swift Markdown](https://github.com/swiftlang/swift-markdown) for CommonMark/GFM parsing. Markdown is parsed when opening a document or switching from source to rendered mode. Typing uses the native text system; Markdown serialization happens on save or when switching to source. Editing stays local and remote images are not fetched. Update checking, archive verification, and installation use Sparkle’s standard native updater.
 
 [MIT license](LICENSE). Dependency licenses are included in the app bundle.
