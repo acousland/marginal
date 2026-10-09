@@ -6,6 +6,15 @@
     <description>Updates for Marginal for macOS</description>
     <language>en</language>
     <item>
+      <title>Marginal 1.2.2</title>
+      <pubDate>Fri, 09 Oct 2026 03:15:00 GMT</pubDate>
+      <sparkle:version>1.2.2</sparkle:version>
+      <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;p&gt;A text-first window: the formatting toolbar and word count are hidden by default, leaving more room for your document.&lt;/p&gt;&lt;p&gt;Show the optional formatting toolbar and word count from View. Your choices are remembered for new windows.&lt;/p&gt;&lt;p&gt;Formatting, tables, and Markdown source remain available through menus and keyboard shortcuts. Source mode has a small title-bar label.&lt;/p&gt;</description>
+      <enclosure url="https://github.com/acousland/marginal/releases/download/v1.2.2/Marginal-1.2.2-macOS.zip" sparkle:edSignature="S/OHcNWuzaJLVPWI+ZAO2qkJTuacgzfv9q6Y60grLbBF4UnM3lJlu5Us3sbJlwjFhfi9yNH3TCAry91uIAI8CQ==" length="1809104" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Marginal 1.2.1</title>
       <pubDate>Fri, 09 Oct 2026 02:59:09 GMT</pubDate>
       <sparkle:version>1.2.1</sparkle:version>
