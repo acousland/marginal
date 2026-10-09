@@ -72,10 +72,13 @@ Keep advanced syntax edits in the source view: task checkboxes, complex list ite
 
 ## Build
 
+All builds, tests, packaging, and release preparation run locally. GitHub hosts source, release downloads, and the update feed; GitHub Actions is disabled for this repository.
+
 Install Xcode and its command-line tools, then:
 
 ```sh
 swift test
+python3 scripts/test-appcast.py
 scripts/build.sh
 open dist/Marginal.app
 ```

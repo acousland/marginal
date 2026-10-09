@@ -41,6 +41,10 @@ swift test
 python3 scripts/test-appcast.py
 VERSION="$version" SIGNING_IDENTITY="$identity" scripts/release.sh
 dist/Marginal.app/Contents/MacOS/Marginal --smoke-test
+if [[ $(lipo -archs dist/Marginal.app/Contents/MacOS/Marginal) != arm64 ]]; then
+  echo "The release app must be Apple silicon only" >&2
+  exit 1
+fi
 # Upload the signed archive before making it discoverable through the feed.
 git tag -a "$tag" -m "Marginal $version"
 git push origin "$tag"
