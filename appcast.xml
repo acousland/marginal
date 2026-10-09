@@ -6,6 +6,15 @@
     <description>Updates for Marginal for macOS</description>
     <language>en</language>
     <item>
+      <title>Marginal 1.3.0</title>
+      <pubDate>Fri, 09 Oct 2026 03:58:27 GMT</pubDate>
+      <sparkle:version>1.3.0</sparkle:version>
+      <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;p&gt;Select rows and columns using handles beside and above the active table. Shift-click to select several, then use a selected handle&amp;#x27;s menu to add or delete them together.&lt;/p&gt;&lt;p&gt;Hover over table-edge boundaries to reveal + buttons for inserting rows and columns.&lt;/p&gt;&lt;p&gt;Use Delete, Copy, Cut, and Escape with row and column selections. Table edits preserve inline formatting and support undo/redo.&lt;/p&gt;&lt;p&gt;Deleting a header promotes the next row; deleting all rows or columns removes the table.&lt;/p&gt;&lt;p&gt;Table controls follow zoom and scrolling, and stay hidden outside the active or hovered table.&lt;/p&gt;</description>
+      <enclosure url="https://github.com/acousland/marginal/releases/download/v1.3.0/Marginal-1.3.0-macOS.zip" sparkle:edSignature="/OWDT9jUeFDDyNztroJKzlcSln+iiTAOFV6KxK+PKA7LVPJEP/TV35Rto/zQA5Ia+RtiB2qyQTnJaR/5l7BWBw==" length="1848749" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Marginal 1.2.4</title>
       <pubDate>Fri, 09 Oct 2026 03:34:34 GMT</pubDate>
       <sparkle:version>1.2.4</sparkle:version>
