@@ -27,6 +27,14 @@ Open a `.md`, `.markdown`, `.mdown`, `.mkd`, or `.txt` file with **File → Open
 | Find | ⌘F |
 | Markdown source / Rendered editor | ⇧⌘M |
 | Show / Hide formatting toolbar | ⌥⌘T |
+| Zoom in / out | ⌘+ (or ⌘=) / ⌘− |
+| Actual size | ⌘0 |
+
+## Zoom and word wrap
+
+Use **View → Zoom In**, **Zoom Out**, or **Actual Size** to scale the document from 50% to 300%. Trackpad pinch gestures also zoom. Zoom changes the view, leaving Markdown, formatting, and document edits untouched.
+
+**View → Word Wrap** is on by default. Turn it off to read long paragraphs and code as single lines with horizontal scrolling; explicit line breaks stay in place. Tables keep their normal cell layout. Zoom and wrap work in both the rendered editor and Markdown source, and your choices are remembered for new windows.
 
 ## Typing shortcuts
 
@@ -98,7 +106,7 @@ dist/Marginal.app/Contents/MacOS/Marginal --check-updates
 Update the default version in `scripts/build.sh`, `scripts/release.sh`, and `Resources/Info.plist`, and write the matching `RELEASE_NOTES.md`. Commit and push the source, then publish from this Mac:
 
 ```sh
-NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.2
+NOTARY_PROFILE=renoir-notary scripts/publish-release.sh 1.2.3
 ```
 
 The script runs the tests, builds and signs the app and Sparkle helpers with a Developer ID Application certificate, notarizes and staples the app, verifies Gatekeeper acceptance, and signs the final ZIP using the `marginal` Sparkle account in the login Keychain. It publishes the tag, archive, and checksum to GitHub, verifies the download is available, then commits and publishes the updated `appcast.xml`. The feed never offers an archive before it is uploaded. Versions must increase; both bundle version fields use the release version.
@@ -112,7 +120,7 @@ To prepare signed artifacts without publishing:
 ```sh
 SIGNING_IDENTITY='Developer ID Application: Your Name (TEAMID)' \
 NOTARY_PROFILE='your-keychain-profile' \
-VERSION=1.2.2 scripts/release.sh
+VERSION=1.2.3 scripts/release.sh
 ```
 
 ## Implementation

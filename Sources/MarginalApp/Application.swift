@@ -149,7 +149,14 @@ mainMenu.addItem(submenu("Format", items: [
 let tableMenuItem = NSMenuItem(title: "Table", action: nil, keyEquivalent: "")
 tableMenuItem.submenu = EditorTextView.tableMenu()
 mainMenu.addItem(tableMenuItem)
+let zoomInWithoutShift = menuItem("Zoom In", #selector(EditorWindowController.zoomIn(_:)), "=")
+zoomInWithoutShift.isHidden = true
+zoomInWithoutShift.allowsKeyEquivalentWhenHidden = true
 mainMenu.addItem(submenu("View", items: [
+    menuItem("Zoom In", #selector(EditorWindowController.zoomIn(_:)), "+"), zoomInWithoutShift,
+    menuItem("Zoom Out", #selector(EditorWindowController.zoomOut(_:)), "-"),
+    menuItem("Actual Size", #selector(EditorWindowController.actualSize(_:)), "0"),
+    menuItem("Word Wrap", #selector(EditorWindowController.toggleWordWrap(_:))), .separator(),
     menuItem("Show Formatting Toolbar", #selector(EditorWindowController.toggleFormattingToolbar(_:)), "t", modifiers: [.command, .option]),
     menuItem("Show Word Count", #selector(EditorWindowController.toggleWordCount(_:))), .separator(),
     menuItem("Show Markdown Source", #selector(EditorWindowController.toggleSource(_:)), "m", modifiers: [.command, .shift]),

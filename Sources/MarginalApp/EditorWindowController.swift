@@ -13,11 +13,18 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     private var scrollToStatus: NSLayoutConstraint?
     private var scrollToBottom: NSLayoutConstraint?
     private let defaults: UserDefaults
+    private var resizingEditor = false
+    private(set) var wrapsLines: Bool
     static let toolbarKey = "showsFormattingToolbar"
     static let wordCountKey = "showsWordCount"
+    static let wordWrapKey = "wrapsLines"
+    static let zoomKey = "documentZoom"
+    static let zoomSteps: [CGFloat] = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3]
+    var zoomLevel: CGFloat { scroll.magnification }
 
     init(document: MarginalDocument, defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        wrapsLines = defaults.object(forKey: Self.wordWrapKey) as? Bool ?? true
         markdownDocument = document
         let layout = NSLayoutManager()
         layout.allowsNonContiguousLayout = true
@@ -37,6 +44,10 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         configureEditor()
         configureStylePicker()
         configureLayout()
+        window.contentView?.layoutSubtreeIfNeeded()
+        let savedZoom = defaults.double(forKey: Self.zoomKey)
+        scroll.magnification = savedZoom.isFinite && savedZoom > 0 ? min(3, max(0.5, savedZoom)) : 1
+        resizeEditor()
         let toolbar = NSToolbar(identifier: "MarginalToolbar")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
@@ -86,6 +97,9 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
     private func configureLayout() {
         guard let content = window?.contentView else { return }
         scroll.hasVerticalScroller = true
+        scroll.allowsMagnification = true
+        scroll.minMagnification = 0.5
+        scroll.maxMagnification = 3
         scroll.autohidesScrollers = true
         scroll.drawsBackground = true
         scroll.backgroundColor = .textBackgroundColor
@@ -111,19 +125,81 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         scroll.contentView.postsBoundsChangedNotifications = true
         scroll.postsFrameChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(resizeEditor), name: NSView.frameDidChangeNotification, object: scroll)
+        NotificationCenter.default.addObserver(self, selector: #selector(resizeEditor), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(didMagnify), name: NSScrollView.didEndLiveMagnifyNotification, object: scroll)
     }
 
     @objc private func resizeEditor() {
-        let width = scroll.contentSize.width
-        guard abs(width - lastWidth) > 1 else { return }
+        let width = scroll.contentView.bounds.width
+        guard !resizingEditor, width > 0, abs(width - lastWidth) > 1 else { return }
+        resizingEditor = true
+        defer { resizingEditor = false }
         lastWidth = width
-        editor.textContainerInset = NSSize(width: max(24, (width - 730) / 2), height: 35)
+        editor.textContainerInset = NSSize(width: wrapsLines ? max(24, (width - 730) / 2) : 24, height: 35)
+        editor.isHorizontallyResizable = !wrapsLines
+        editor.autoresizingMask = wrapsLines ? [.width] : []
+        scroll.hasHorizontalScroller = !wrapsLines
+        guard let container = editor.textContainer else { return }
+        container.widthTracksTextView = wrapsLines
+        editor.setFrameSize(NSSize(width: width, height: max(editor.frame.height, scroll.contentView.bounds.height)))
+        container.containerSize = NSSize(width: wrapsLines ? max(1, width - 2 * editor.textContainerInset.width) : CGFloat(Float.greatestFiniteMagnitude), height: CGFloat.greatestFiniteMagnitude)
+        updateTableWidths()
+        editor.sizeToFit()
+        if editor.frame.width < width { editor.setFrameSize(NSSize(width: width, height: editor.frame.height)) }
+    }
+
+    private func updateTableWidths() {
+        guard let storage = editor.textStorage else { return }
+        var tables: Set<ObjectIdentifier> = []
+        storage.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+            for block in (value as? NSParagraphStyle)?.textBlocks ?? [] {
+                guard let table = (block as? NSTextTableBlock)?.table, tables.insert(ObjectIdentifier(table)).inserted else { continue }
+                // Percentage-width tables need a finite reading width when prose is unwrapped.
+                table.setValue(wrapsLines ? 100 : max(1, min(730, lastWidth - 48)),
+                               type: wrapsLines ? .percentageValueType : .absoluteValueType, for: .width)
+            }
+        }
+        if !tables.isEmpty { editor.layoutManager?.invalidateLayout(forCharacterRange: NSRange(location: 0, length: storage.length), actualCharacterRange: nil) }
+    }
+
+    @objc func zoomIn(_ sender: Any?) {
+        if let next = Self.zoomSteps.first(where: { $0 > zoomLevel + 0.001 }) { setZoom(next) }
+    }
+
+    @objc func zoomOut(_ sender: Any?) {
+        if let next = Self.zoomSteps.last(where: { $0 < zoomLevel - 0.001 }) { setZoom(next) }
+    }
+
+    @objc func actualSize(_ sender: Any?) { setZoom(1) }
+
+    private func setZoom(_ value: CGFloat) {
+        let bounds = scroll.contentView.bounds
+        scroll.setMagnification(value, centeredAt: NSPoint(x: bounds.midX, y: bounds.midY))
+        resizeEditor()
+        defaults.set(Double(zoomLevel), forKey: Self.zoomKey)
+    }
+
+    @objc private func didMagnify() {
+        resizeEditor()
+        defaults.set(Double(zoomLevel), forKey: Self.zoomKey)
+    }
+
+    @objc func toggleWordWrap(_ sender: Any?) {
+        wrapsLines.toggle()
+        defaults.set(wrapsLines, forKey: Self.wordWrapKey)
+        lastWidth = 0
+        resizeEditor()
+        if wrapsLines {
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: scroll.contentView.bounds.minY))
+            scroll.reflectScrolledClipView(scroll.contentView)
+        }
     }
 
     func textDidChange(_ notification: Notification) {
         markdownDocument?.hasEdits = true
         markdownDocument?.updateChangeCount(.changeDone)
         editor.needsDisplay = true
+        if !wrapsLines { updateTableWidths() }
         statusWork?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.updateStatus() }
         statusWork = work
@@ -144,6 +220,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         editor.typingAttributes = editor.sourceMode ? [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor] : editor.textStorage!.length > 0 ? editor.textStorage!.attributes(at: 0, effectiveRange: nil) : MarkdownStyle.attributes()
         editor.setSelectedRange(NSRange(location: 0, length: 0))
         editor.needsDisplay = true
+        updateTableWidths()
         updateStatus()
     }
 
@@ -181,6 +258,12 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
             menuItem.state = status.isHidden ? .off : .on
         } else if menuItem.action == #selector(toggleSource(_:)) {
             menuItem.title = editor.sourceMode ? "Show Rendered Editor" : "Show Markdown Source"
+        } else if menuItem.action == #selector(toggleWordWrap(_:)) {
+            menuItem.state = wrapsLines ? .on : .off
+        } else if menuItem.action == #selector(zoomIn(_:)) {
+            return zoomLevel < 3 - 0.001
+        } else if menuItem.action == #selector(zoomOut(_:)) {
+            return zoomLevel > 0.5 + 0.001
         }
         return true
     }
@@ -211,6 +294,7 @@ final class EditorWindowController: NSWindowController, NSTextViewDelegate, NSTo
         editor.sourceMode = source
         let rendered = content ?? (source ? NSAttributedString(string: markdown, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor]) : MarkdownCodec.render(markdown, baseURL: document.fileURL))
         document.storage.setAttributedString(rendered)
+        updateTableWidths()
         editor.typingAttributes = source ? [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.labelColor] : MarkdownStyle.attributes()
         editor.setSelectedRange(NSRange(location: min(selection.location, rendered.length), length: min(selection.length, max(0, rendered.length - selection.location))))
         stylePicker.isEnabled = !source

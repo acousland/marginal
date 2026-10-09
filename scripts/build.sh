@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version=${VERSION:-1.2.2}
+version=${VERSION:-1.2.3}
 configuration=${CONFIGURATION:-release}
 feed_url=${MARGINAL_FEED_URL:-https://raw.githubusercontent.com/acousland/marginal/main/appcast.xml}
 public_key=$(tr -d '[:space:]' < Resources/sparkle-public-key)

@@ -18,7 +18,7 @@ final class EditorTests: XCTestCase {
         super.tearDown()
     }
 
-    private func editor(_ source: String) throws -> (MarginalDocument, EditorWindowController) {
+    private func editor(_ source: String, defaults: UserDefaults? = nil) throws -> (MarginalDocument, EditorWindowController) {
         _ = NSApplication.shared
         let document = MarginalDocument()
         // Tests explicitly close groups to exercise undo without a running app event loop.
@@ -28,7 +28,10 @@ final class EditorTests: XCTestCase {
         document.undoManager!.beginUndoGrouping()
         documents.append(document)
         try document.read(from: Data(source.utf8), ofType: "net.daringfireball.markdown")
-        document.makeWindowControllers()
+        if let defaults {
+            document.storage.setAttributedString(MarkdownCodec.render(source))
+            document.addWindowController(EditorWindowController(document: document, defaults: defaults))
+        } else { document.makeWindowControllers() }
         let controller = try XCTUnwrap(document.windowControllers.first as? EditorWindowController)
         controller.window?.makeFirstResponder(controller.editor)
         return (document, controller)
@@ -39,6 +42,95 @@ final class EditorTests: XCTestCase {
             while manager.groupingLevel > 0 { manager.endUndoGrouping() }
             manager.undo()
         }
+    }
+
+    private func visualLines(_ controller: EditorWindowController) throws -> Int {
+        let layout = try XCTUnwrap(controller.editor.layoutManager)
+        let container = try XCTUnwrap(controller.editor.textContainer)
+        layout.ensureLayout(for: container)
+        var lines = 0
+        layout.enumerateLineFragments(forGlyphRange: layout.glyphRange(for: container)) { _, _, _, _, _ in lines += 1 }
+        return lines
+    }
+
+    func testZoomReflowsWithoutChangingMarkdownOrSelection() throws {
+        let suite = "Marginal.ZoomTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let source = "# Title\n\n" + String(repeating: "Words with **bold** and `code`. ", count: 80) + "\n"
+        let (document, controller) = try editor(source, defaults: defaults)
+        controller.window?.setContentSize(NSSize(width: 600, height: 500))
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        let original = NSAttributedString(attributedString: document.storage)
+        let selected = NSRange(location: 7, length: 5)
+        controller.editor.setSelectedRange(selected)
+        let lines = try visualLines(controller)
+        let width = controller.editor.textContainer!.containerSize.width
+        controller.zoomIn(nil)
+        XCTAssertGreaterThan(controller.zoomLevel, 1)
+        XCTAssertLessThan(controller.editor.textContainer!.containerSize.width, width)
+        XCTAssertGreaterThan(try visualLines(controller), lines)
+        XCTAssertEqual(controller.editor.selectedRange(), selected)
+        XCTAssertEqual(document.storage, original)
+        XCTAssertEqual(try document.data(ofType: "net.daringfireball.markdown"), Data(source.utf8))
+        XCTAssertFalse(document.hasEdits)
+        let (_, reloaded) = try editor("", defaults: defaults)
+        XCTAssertEqual(reloaded.zoomLevel, controller.zoomLevel, accuracy: 0.001)
+        controller.actualSize(nil)
+        XCTAssertEqual(controller.zoomLevel, 1, accuracy: 0.001)
+        controller.zoomOut(nil)
+        XCTAssertLessThan(controller.zoomLevel, 1)
+        XCTAssertEqual(document.storage, original)
+    }
+
+    func testWordWrapReflowsRenderedAndSourceWithoutInsertingLineBreaks() throws {
+        let suite = "Marginal.WrapTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let source = String(repeating: "A long sentence to read. ", count: 80) + "\n"
+        let (document, controller) = try editor(source, defaults: defaults)
+        XCTAssertGreaterThan(try visualLines(controller), 1)
+        controller.toggleWordWrap(nil)
+        XCTAssertEqual(try visualLines(controller), 1)
+        XCTAssertGreaterThan(controller.editor.frame.width, controller.scroll.contentView.bounds.width)
+        XCTAssertTrue(controller.scroll.hasHorizontalScroller)
+        let (_, reloaded) = try editor("", defaults: defaults)
+        XCTAssertFalse(reloaded.wrapsLines)
+        controller.toggleSource(nil)
+        XCTAssertEqual(try visualLines(controller), 1)
+        XCTAssertEqual(controller.editor.string, source)
+        controller.toggleWordWrap(nil)
+        XCTAssertGreaterThan(try visualLines(controller), 1)
+        XCTAssertFalse(controller.scroll.hasHorizontalScroller)
+        XCTAssertEqual(controller.editor.frame.width, controller.scroll.contentView.bounds.width, accuracy: 1)
+        controller.zoomIn(nil)
+        controller.toggleSource(nil)
+        XCTAssertTrue(controller.wrapsLines)
+        XCTAssertGreaterThan(try visualLines(controller), 1)
+        XCTAssertEqual(try document.data(ofType: "net.daringfireball.markdown"), Data(source.utf8))
+        XCTAssertFalse(document.hasEdits)
+    }
+
+    func testUnwrappedTableKeepsFiniteLayoutAndRemainsEditable() throws {
+        let suite = "Marginal.TableWrapTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let source = "| Name | State |\n| --- | --- |\n| Marginal | Draft |\n"
+        let (document, controller) = try editor(source, defaults: defaults)
+        controller.toggleWordWrap(nil)
+        _ = try visualLines(controller)
+        let rect = controller.editor.layoutManager!.usedRect(for: controller.editor.textContainer!)
+        XCTAssertTrue(rect.width.isFinite && rect.height.isFinite)
+        XCTAssertLessThan(rect.width, 10_000)
+        XCTAssertLessThan(controller.editor.frame.width, 10_000)
+        XCTAssertEqual(try document.data(ofType: "net.daringfireball.markdown"), Data(source.utf8))
+        controller.editor.insertText("Ready", replacementRange: (controller.editor.string as NSString).range(of: "Draft"))
+        XCTAssertTrue(document.markdown().contains("| Marginal | Ready |"))
+        undo(document)
+        XCTAssertTrue(document.markdown().contains("| Marginal | Draft |"))
+        controller.toggleWordWrap(nil)
+        _ = try visualLines(controller)
+        XCTAssertLessThan(controller.editor.layoutManager!.usedRect(for: controller.editor.textContainer!).width, 10_000)
     }
 
     func testOpeningAndSavingUntouchedFileIsByteIdentical() throws {
