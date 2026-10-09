@@ -6,6 +6,15 @@
     <description>Updates for Marginal for macOS</description>
     <language>en</language>
     <item>
+      <title>Marginal 1.2.4</title>
+      <pubDate>Fri, 09 Oct 2026 03:34:34 GMT</pubDate>
+      <sparkle:version>1.2.4</sparkle:version>
+      <sparkle:shortVersionString>1.2.4</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+      <description>&lt;p&gt;Fix a text-view resizing loop that could crash while zooming on macOS 27, including trackpad pinch gestures.&lt;/p&gt;&lt;p&gt;Keep text reflow out of synchronous scroll-view bounds notifications and avoid unnecessary table layout invalidation.&lt;/p&gt;&lt;p&gt;Zoom, word wrap, and saved Markdown retain their existing behavior.&lt;/p&gt;</description>
+      <enclosure url="https://github.com/acousland/marginal/releases/download/v1.2.4/Marginal-1.2.4-macOS.zip" sparkle:edSignature="U5HFnVr7Z60Dy2mPS8qkftinu8O3yaLWXYx5vJ8uPoDlK/P+Jz74za2AZl2bO1S9LcweFKY7n2CHfg8XmwP4BA==" length="1818083" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Marginal 1.2.3</title>
       <pubDate>Fri, 09 Oct 2026 03:24:41 GMT</pubDate>
       <sparkle:version>1.2.3</sparkle:version>
